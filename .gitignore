@@ -2,3 +2,8 @@ venv
 __marimo__
 movies_final.csv 
 .ipynb_checkpoints/
+movie_ids_final.npy
+ratings_heatmap_8000.png
+ratings_matrix_10.csv
+ratings_sparse_final.npz
+user_ids_final.npy
