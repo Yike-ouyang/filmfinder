@@ -26,8 +26,11 @@ def _():
     import marimo as mo
     import numpy as np
     from scipy.sparse import load_npz
-
-    return load_npz, mo, np
+    import pandas as pd
+    from surprise import Dataset, Reader, SVD
+    from surprise.model_selection import ShuffleSplit
+    from surprise import accuracy
+    return Dataset, Reader, SVD, ShuffleSplit, accuracy, load_npz, mo, np, pd
 
 
 @app.cell
@@ -62,8 +65,7 @@ def _(load_npz, np):
         len(user_ids_final),
         len(movie_ids_final)
     ), "Mismatch between the matrix and the identifiers."
-
-    return movie_ids_final, ratings_sparse_final, user_ids_final
+    return (ratings_sparse_final,)
 
 
 @app.cell
@@ -120,6 +122,132 @@ def _(ratings_sparse_final):
     print("Number of ratings:", len(ratings))
     print("Number of users:", ratings_sparse_final.shape[0])
     print("Number of films:", ratings_sparse_final.shape[1])
+    return movie_idx, ratings, user_idx
+
+
+@app.cell
+def _(Dataset, Reader, movie_idx, pd, ratings, user_idx):
+    df_ratings = pd.DataFrame({
+        "user_id": user_idx,
+        "movie_id": movie_idx,
+        "rating": ratings
+    })
+    rating_min = float(df_ratings["rating"].min())
+    rating_max = float(df_ratings["rating"].max())
+
+    reader = Reader(
+        rating_scale=(rating_min, rating_max)
+    )
+
+    data = Dataset.load_from_df(
+        df_ratings[["user_id", "movie_id", "rating"]],
+        reader
+    )
+    return (data,)
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## Training the model
+    """)
+    return
+
+
+@app.cell
+def _(SVD, ShuffleSplit, accuracy, data, pd):
+
+
+    # ==========================================
+    # CONFIGURATION
+    # ==========================================
+
+    epochs = [1, 2, 5, 10, 15, 20, 30, 40, 50]
+
+    cv = ShuffleSplit(
+        n_splits=2,
+        test_size=0.2,
+        random_state=42
+    )
+
+    results = []
+
+    # ==========================================
+    # CROSS VALIDATION
+    # ==========================================
+
+    for fold, (trainset, testset) in enumerate(cv.split(data), start=1):
+
+        print(f"\n===== Fold {fold}/2 =====")
+
+        # Notes d'entraînement pour évaluation
+        train_testset = trainset.build_testset()
+
+        for n_epoch in epochs:
+
+            model = SVD(
+                n_factors=100,
+                n_epochs=n_epoch,
+                lr_all=0.005,
+                reg_all=0.02,
+                biased=True,
+                random_state=42,
+                verbose=False
+            )
+
+            model.fit(trainset)
+
+            # Prédictions sur train
+            train_predictions = model.test(train_testset)
+
+            # Prédictions sur validation
+            val_predictions = model.test(testset)
+
+            # Métriques
+            train_rmse = accuracy.rmse(
+                train_predictions,
+                verbose=False
+            )
+
+            val_rmse = accuracy.rmse(
+                val_predictions,
+                verbose=False
+            )
+
+            train_mae = accuracy.mae(
+                train_predictions,
+                verbose=False
+            )
+
+            val_mae = accuracy.mae(
+                val_predictions,
+                verbose=False
+            )
+
+            results.append({
+                "fold": fold,
+                "epoch": n_epoch,
+                "train_rmse": train_rmse,
+                "val_rmse": val_rmse,
+                "train_mae": train_mae,
+                "val_mae": val_mae
+            })
+
+            print(
+                f"Epoch {n_epoch:3d} | "
+                f"Train RMSE: {train_rmse:.4f} | "
+                f"Val RMSE: {val_rmse:.4f}"
+            )
+
+    df_learning = pd.DataFrame(results)
+    return (results,)
+
+
+@app.cell
+def _(pd, results):
+    df_results = pd.DataFrame(results)
+
+    df_results
     return
 
 

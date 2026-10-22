@@ -5,6 +5,13 @@ app = marimo.App(width="medium")
 
 
 @app.cell
+def _():
+    import time
+    time.sleep(120)
+    return
+
+
+@app.cell
 def _(mo):
     mo.md(r"""
     # Filmfinder — Data Preprocessing
@@ -31,7 +38,6 @@ def _():
     import matplotlib.pyplot as plt
     from pathlib import Path
     from scipy.sparse import csr_matrix, save_npz
-
     return Path, csr_matrix, mo, np, pd, plt, save_npz
 
 
