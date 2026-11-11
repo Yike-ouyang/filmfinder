@@ -96,9 +96,9 @@ def _(mo):
     mo.md(r"""
     ## 1. Sources and configuration
 
-    Kaggle datasets are downloaded only when the required CSV files cannot be
-    found locally. Authentication relies on the existing Kaggle environment;
-    no credentials are stored in this notebook.
+    The source CSV files are read from a local directory. No network access or
+    authentication is required. The location can be overridden with the
+    `FILMFINDER_INPUT_DIR` environment variable.
     """)
     return
 
@@ -107,7 +107,10 @@ def _(mo):
 def _(Path, os):
     NOTEBOOK_DIR = Path.cwd()
     INPUT_DIR = Path(
-        os.environ.get("FILMFINDER_INPUT_DIR", NOTEBOOK_DIR / "data")
+        os.environ.get(
+            "FILMFINDER_INPUT_DIR",
+            "/Data/yike-ouyang/ml_training/data",
+        )
     )
     OUTPUT_DIR = Path(
         os.environ.get("FILMFINDER_OUTPUT_DIR", NOTEBOOK_DIR / "outputs")
@@ -117,7 +120,6 @@ def _(Path, os):
         "notebook_dir": NOTEBOOK_DIR,
         "input_dir": INPUT_DIR,
         "output_dir": OUTPUT_DIR,
-        "download_if_missing": True,
         "min_ratings_per_movie": 10,
         "min_ratings_per_user": 15,
         "duration_tolerance_minutes": 10,
@@ -130,8 +132,6 @@ def _(Path, os):
 
     DATASETS = {
         "catalogue": {
-            "slug": "gsimonx37/letterboxd",
-            "version": None,
             "files": {
                 "movies.csv": "movies",
                 "studios.csv": "studios",
@@ -139,8 +139,6 @@ def _(Path, os):
             },
         },
         "ratings": {
-            "slug": "samlearner/letterboxd-movie-ratings-data",
-            "version": 6,
             "files": {
                 "movie_data.csv": "movie_data",
                 "ratings_export.csv": "ratings",
@@ -148,16 +146,7 @@ def _(Path, os):
         },
     }
 
-    SEARCH_DIRS = [
-        INPUT_DIR,
-        NOTEBOOK_DIR,
-        NOTEBOOK_DIR / "data",
-        NOTEBOOK_DIR / "input",
-        Path(
-            "/users/eleves-b/2023/yike.ouyang/.cache/kagglehub/"
-            "datasets/samlearner/letterboxd-movie-ratings-data/versions/6"
-        ),
-    ]
+    SEARCH_DIRS = [INPUT_DIR]
 
     return CONFIG, DATASETS, SEARCH_DIRS
 
@@ -165,25 +154,16 @@ def _(Path, os):
 @app.cell
 def _(mo):
     mo.md(r"""
-    ## 2. Source discovery and download
+    ## 2. Source discovery
 
-    Each dataset is searched as a whole. If at least one expected file is
-    missing, the dataset is downloaded with `kagglehub` and searched
-    recursively in the returned directory.
+    Each dataset is resolved from the local input directory. If any expected
+    file is missing, the notebook fails early with the list of missing files.
     """)
     return
 
 
 @app.cell
-def _(CONFIG, DATASETS, Path, SEARCH_DIRS, pd):
-    try:
-        import kagglehub
-    except ImportError as exc:
-        raise RuntimeError(
-            "kagglehub is required to download the datasets. "
-            "Install it with `pip install kagglehub`."
-        ) from exc
-
+def _(DATASETS, SEARCH_DIRS, pd):
     def find_file(filename, roots):
         for root in roots:
             if not root.exists():
@@ -199,24 +179,8 @@ def _(CONFIG, DATASETS, Path, SEARCH_DIRS, pd):
                 return matches[0]
         return None
 
-    def download_dataset(slug, version=None):
-        try:
-            if version is not None:
-                return Path(
-                    kagglehub.dataset_download(slug, version=version)
-                )
-            return Path(kagglehub.dataset_download(slug))
-        except TypeError:
-            return Path(kagglehub.dataset_download(slug))
-        except Exception as exc:
-            raise RuntimeError(
-                f"Unable to download Kaggle dataset {slug}. "
-                "Check the Kaggle authentication available in the "
-                "execution environment."
-            ) from exc
-
     SOURCE_PATHS = {}
-    download_rows = []
+    source_rows = []
     local_roots = [root for root in SEARCH_DIRS if root.exists()]
 
     for dataset_name, specification in DATASETS.items():
@@ -225,50 +189,27 @@ def _(CONFIG, DATASETS, Path, SEARCH_DIRS, pd):
             for source_filename in specification["files"]
         }
 
-        mode = "local"
-        dataset_root = None
-
-        if not all(found.values()):
-            if not CONFIG["download_if_missing"]:
-                missing_files = [
-                    source_filename
-                    for source_filename, source_path in found.items()
-                    if source_path is None
-                ]
-                raise FileNotFoundError(
-                    f"Missing files for {dataset_name}: {missing_files}"
-                )
-
-            dataset_root = download_dataset(
-                specification["slug"],
-                specification["version"],
+        missing_files = [
+            source_filename
+            for source_filename, source_path in found.items()
+            if source_path is None
+        ]
+        if missing_files:
+            raise FileNotFoundError(
+                f"Missing files for {dataset_name} in "
+                f"{[str(root) for root in local_roots]}: {missing_files}"
             )
-            mode = "kagglehub"
-            found = {
-                source_filename: find_file(
-                    source_filename,
-                    [dataset_root],
-                )
-                for source_filename in specification["files"]
-            }
 
         for source_filename, source_path in found.items():
-            if source_path is None:
-                raise FileNotFoundError(
-                    f"Could not locate {source_filename} for dataset "
-                    f"{dataset_name}."
-                )
             SOURCE_PATHS[specification["files"][source_filename]] = source_path
 
-        download_rows.append({
+        source_rows.append({
             "dataset": dataset_name,
-            "slug": specification["slug"],
-            "version": specification["version"],
-            "mode": mode,
-            "root": None if dataset_root is None else str(dataset_root),
+            "root": str(local_roots[0]),
+            "files": ", ".join(str(path) for path in found.values()),
         })
 
-    SOURCE_PATHS_DF = pd.DataFrame(download_rows)
+    SOURCE_PATHS_DF = pd.DataFrame(source_rows)
     SOURCE_PATHS_DF
     return SOURCE_PATHS, SOURCE_PATHS_DF
 
