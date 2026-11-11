@@ -9,3 +9,4 @@ ratings_sparse_final.npz
 user_ids_final.npy
 __pycache__/
 notes.md
+prompts
