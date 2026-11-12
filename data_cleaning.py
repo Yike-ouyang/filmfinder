@@ -10,10 +10,69 @@ def _():
     import pandas as pd
     import numpy as np
     import unicodedata
+    import json
     from collections import defaultdict
+    from pathlib import Path
     from scipy.sparse import csr_matrix, save_npz
 
-    return csr_matrix, mo, np, pd, save_npz, unicodedata
+    INTERMEDIATE_DIR = Path("results_intermediate")
+
+    def save_intermediate(name, df):
+        INTERMEDIATE_DIR.mkdir(parents=True, exist_ok=True)
+        _out = df.copy()
+        for _col in _out.columns:
+            _sample = _out[_col].dropna()
+            if len(_sample) and isinstance(
+                _sample.iloc[0], (list, tuple, set)
+            ):
+                _out[_col] = _out[_col].map(
+                    lambda _value: (
+                        json.dumps(list(_value), ensure_ascii=False)
+                        if isinstance(_value, (list, tuple, set))
+                        else _value
+                    )
+                )
+        _path = INTERMEDIATE_DIR / f"{name}.parquet"
+        _out.to_parquet(_path, index=False)
+        return str(_path)
+
+    def make_step_log(
+        step,
+        description,
+        source,
+        source_rows,
+        result,
+        result_rows,
+        saved_file=None,
+        note="",
+        order=None,
+    ):
+        _source_rows = int(source_rows)
+        _result_rows = int(result_rows)
+        return {
+            "order": order,
+            "step": step,
+            "description": description,
+            "source": source,
+            "source_rows": _source_rows,
+            "result": result,
+            "result_rows": _result_rows,
+            "rows_lost": _source_rows - _result_rows,
+            "saved_file": saved_file,
+            "note": note,
+        }
+
+    return (
+        INTERMEDIATE_DIR,
+        csr_matrix,
+        make_step_log,
+        mo,
+        np,
+        pd,
+        save_intermediate,
+        save_npz,
+        unicodedata,
+    )
 
 
 @app.cell
@@ -25,7 +84,7 @@ def _(mo):
 
 
 @app.cell
-def _(pd):
+def _(make_step_log, pd):
     studios = pd.read_csv("data/studios.csv")
     movies=pd.read_csv("data/movies.csv")
     movies_users = pd.read_csv(
@@ -36,7 +95,46 @@ def _(pd):
             "data/ratings_export.csv",
             engine="python"
         )
-    return movies, movies_users, rating_export, studios
+
+    log_load = [
+        make_step_log(
+            "load_movies",
+            "Chargement du catalogue des films",
+            "data/movies.csv",
+            len(movies),
+            "movies",
+            len(movies),
+            order=1,
+        ),
+        make_step_log(
+            "load_movies_users",
+            "Chargement du catalogue des films utilisateurs",
+            "data/movie_data.csv",
+            len(movies_users),
+            "movies_users",
+            len(movies_users),
+            order=2,
+        ),
+        make_step_log(
+            "load_studios",
+            "Chargement des studios",
+            "data/studios.csv",
+            len(studios),
+            "studios",
+            len(studios),
+            order=3,
+        ),
+        make_step_log(
+            "load_rating_export",
+            "Chargement des notes",
+            "data/ratings_export.csv",
+            len(rating_export),
+            "rating_export",
+            len(rating_export),
+            order=4,
+        ),
+    ]
+    return log_load, movies, movies_users, rating_export, studios
 
 
 @app.cell
@@ -60,7 +158,7 @@ def _(movies_users):
 
 
 @app.cell
-def _(movies, studios):
+def _(make_step_log, movies, save_intermediate, studios):
     studios_agg = (
         studios.groupby("id")["studio"]
         .agg(lambda x: sorted(set(x.dropna())))
@@ -73,11 +171,27 @@ def _(movies, studios):
         how="left",
         validate="one_to_one"
     )
-    return (movies_studios,)
+
+    log_studios = make_step_log(
+        "merge_studios",
+        "Association des studios aux films",
+        "movies",
+        len(movies),
+        "movies_studios",
+        len(movies_studios),
+        saved_file=save_intermediate("movies_studios", movies_studios),
+        order=5,
+    )
+    return log_studios, movies_studios
 
 
 @app.cell
-def _(movies_studios, movies_users):
+def _(
+    make_step_log,
+    movies_studios,
+    movies_users,
+    save_intermediate,
+):
     # Nettoyage du catalogue des films
     movies_clean = (
         movies_studios[["id", "name", "date", "description", "minute","studio"]]
@@ -106,7 +220,32 @@ def _(movies_studios, movies_users):
         })
         .copy()
     )
-    return movies_clean, movies_users_clean
+
+    log_uniformize = [
+        make_step_log(
+            "clean_movies",
+            "Sélection et renommage des colonnes films",
+            "movies_studios",
+            len(movies_studios),
+            "movies_clean",
+            len(movies_clean),
+            saved_file=save_intermediate("movies_clean", movies_clean),
+            order=6,
+        ),
+        make_step_log(
+            "clean_movies_users",
+            "Sélection et renommage des colonnes films utilisateurs",
+            "movies_users",
+            len(movies_users),
+            "movies_users_clean",
+            len(movies_users_clean),
+            saved_file=save_intermediate(
+                "movies_users_clean", movies_users_clean
+            ),
+            order=7,
+        ),
+    ]
+    return log_uniformize, movies_clean, movies_users_clean
 
 
 @app.cell
@@ -130,7 +269,14 @@ def _(mo):
 
 
 @app.cell
-def _(movies_clean, np, pd, unicodedata):
+def _(
+    make_step_log,
+    movies_clean,
+    np,
+    pd,
+    save_intermediate,
+    unicodedata,
+):
 
 
 
@@ -245,7 +391,18 @@ def _(movies_clean, np, pd, unicodedata):
 
 
     movies_dedup = _deduplicate_movies(movies_clean)
-    return (movies_dedup,)
+
+    log_dedup = make_step_log(
+        "deduplicate_movies",
+        "Fusion des doublons de films",
+        "movies_clean",
+        len(movies_clean),
+        "movies_dedup",
+        len(movies_dedup),
+        saved_file=save_intermediate("movies_dedup", movies_dedup),
+        order=8,
+    )
+    return log_dedup, movies_dedup
 
 
 @app.cell
@@ -263,7 +420,12 @@ def _(mo):
 
 
 @app.cell
-def _(movies_dedup, movies_users_clean):
+def _(
+    make_step_log,
+    movies_dedup,
+    movies_users_clean,
+    save_intermediate,
+):
     def _merge_movie_catalogs(_movies, _users):
         import pandas as pd
         import unicodedata
@@ -387,14 +549,29 @@ def _(movies_dedup, movies_users_clean):
         print(f"Correspondances    : {len(result):,}")
         print(f"Cas ambigus exclus : {ambiguous:,}")
 
-        return result
+        return result, {"ambiguous": ambiguous}
 
 
-    movies_final = _merge_movie_catalogs(
+    movies_final, _merge_stats = _merge_movie_catalogs(
         movies_dedup,
         movies_users_clean
     )
-    return (movies_final,)
+
+    log_merge = make_step_log(
+        "merge_movie_catalogs",
+        "Rapprochement des films utilisateurs avec le catalogue",
+        "movies_users_clean",
+        len(movies_users_clean),
+        "movies_final",
+        len(movies_final),
+        saved_file=save_intermediate("movies_final", movies_final),
+        note=(
+            f"Catalogue movies_dedup : {len(movies_dedup):,} lignes ; "
+            f"cas ambigus exclus : {_merge_stats['ambiguous']:,}"
+        ),
+        order=9,
+    )
+    return log_merge, movies_final
 
 
 @app.cell
@@ -418,11 +595,25 @@ def _(rating_export):
 
 
 @app.cell
-def _(movies_final, rating_export):
+def _(make_step_log, movies_final, rating_export):
     scores_clean = rating_export[
         rating_export["movie_id"].isin(movies_final["movie_id"].dropna())
     ].copy()
-    return (scores_clean,)
+
+    log_scores_clean = make_step_log(
+        "filter_movies_in_catalog",
+        "Conservation des notes des films présents dans le catalogue final",
+        "rating_export",
+        len(rating_export),
+        "scores_clean",
+        len(scores_clean),
+        note=(
+            "Films du catalogue final : "
+            f"{movies_final['movie_id'].nunique():,}"
+        ),
+        order=10,
+    )
+    return log_scores_clean, scores_clean
 
 
 @app.cell
@@ -440,11 +631,13 @@ def _(mo):
 
 
 @app.cell
-def _(scores_clean):
+def _(make_step_log, scores_clean):
     def _filter_scores(_scores, min_movie=20, min_user=10):
         _df = _scores.copy()
+        _iterations = 0
 
         while True:
+            _iterations += 1
             _n_before = len(_df)
 
             # Films avec au moins 20 notes
@@ -462,15 +655,30 @@ def _(scores_clean):
         print(f"Films conservés : {_df['movie_id'].nunique():,}")
         print(f"Utilisateurs conservés : {_df['user_id'].nunique():,}")
 
-        return _df
+        return _df, _iterations
 
 
-    scores_filtered = _filter_scores(
+    scores_filtered, _filter_iterations = _filter_scores(
         scores_clean,
         min_movie=20,
         min_user=10
     )
-    return (scores_filtered,)
+
+    log_filter = make_step_log(
+        "filter_min_reviews",
+        "Filtrage itératif : films >= 20 notes et utilisateurs >= 10 notes",
+        "scores_clean",
+        len(scores_clean),
+        "scores_filtered",
+        len(scores_filtered),
+        note=(
+            f"Itérations : {_filter_iterations} ; "
+            f"films : {scores_filtered['movie_id'].nunique():,} ; "
+            f"utilisateurs : {scores_filtered['user_id'].nunique():,}"
+        ),
+        order=11,
+    )
+    return log_filter, scores_filtered
 
 
 @app.cell
@@ -488,7 +696,14 @@ def _(mo):
 
 
 @app.cell
-def _(csr_matrix, np, pd, save_npz, scores_filtered):
+def _(
+    csr_matrix,
+    make_step_log,
+    np,
+    pd,
+    save_npz,
+    scores_filtered,
+):
     def _save_sparse_matrix(_scores):
 
 
@@ -559,11 +774,26 @@ def _(csr_matrix, np, pd, save_npz, scores_filtered):
 
 
     ratings_matrix = _save_sparse_matrix(scores_filtered)
-    return
+
+    log_sparse = make_step_log(
+        "build_sparse_matrix",
+        "Construction de la matrice sparse utilisateur-film",
+        "scores_filtered",
+        len(scores_filtered),
+        "ratings_matrix",
+        ratings_matrix.nnz,
+        note=(
+            f"Dimensions : {ratings_matrix.shape} ; "
+            f"utilisateurs : {ratings_matrix.shape[0]:,} ; "
+            f"films : {ratings_matrix.shape[1]:,}"
+        ),
+        order=12,
+    )
+    return (log_sparse,)
 
 
 @app.cell
-def _(movies_final):
+def _(make_step_log, movies_final, save_intermediate):
     def _save_movie_context(_movies):
         import pandas as pd
         import numpy as np
@@ -607,7 +837,103 @@ def _(movies_final):
 
 
     movie_context = _save_movie_context(movies_final)
-    return
+
+    log_context = make_step_log(
+        "build_movie_context",
+        "Alignement du contexte films avec les colonnes de la matrice",
+        "movies_final",
+        len(movies_final),
+        "movie_context",
+        len(movie_context),
+        saved_file=save_intermediate("movie_context", movie_context),
+        order=13,
+    )
+    return log_context, movie_context
+
+
+@app.cell
+def _(
+    INTERMEDIATE_DIR,
+    log_context,
+    log_dedup,
+    log_filter,
+    log_load,
+    log_merge,
+    log_scores_clean,
+    log_sparse,
+    log_studios,
+    log_uniformize,
+    mo,
+    pd,
+):
+    _records = []
+    for _item in [
+        log_load,
+        log_studios,
+        log_uniformize,
+        log_dedup,
+        log_merge,
+        log_scores_clean,
+        log_filter,
+        log_sparse,
+        log_context,
+    ]:
+        if isinstance(_item, list):
+            _records.extend(_item)
+        else:
+            _records.append(_item)
+
+    pipeline_log = (
+        pd.DataFrame(_records)
+        .sort_values("order")
+        .reset_index(drop=True)
+    )
+
+    pipeline_log["pct_lost"] = (
+        pipeline_log["rows_lost"]
+        / pipeline_log["source_rows"]
+        * 100
+    ).round(2)
+
+    pipeline_log = pipeline_log[
+        [
+            "order",
+            "step",
+            "description",
+            "source",
+            "source_rows",
+            "result",
+            "result_rows",
+            "rows_lost",
+            "pct_lost",
+            "saved_file",
+            "note",
+        ]
+    ]
+
+    INTERMEDIATE_DIR.mkdir(parents=True, exist_ok=True)
+    pipeline_log.to_csv(
+        INTERMEDIATE_DIR / "pipeline_log.csv",
+        index=False,
+    )
+    pipeline_log.to_json(
+        INTERMEDIATE_DIR / "pipeline_log.json",
+        orient="records",
+        force_ascii=False,
+        indent=2,
+    )
+
+    mo.vstack([
+        mo.md("## Log du pipeline de nettoyage"),
+        mo.md(
+            f"{len(pipeline_log)} étapes documentées. "
+            "Log sauvegardé dans "
+            "`results_intermediate/pipeline_log.csv` et "
+            "`results_intermediate/pipeline_log.json`."
+        ),
+        mo.ui.table(pipeline_log, pagination=False),
+    ])
+    return (pipeline_log,)
 
 
 if __name__ == "__main__":

@@ -27,15 +27,16 @@ def _(mo):
     mo.md(r"""
     ## Choix de conception
 
-    - Déduplication déterministe des films par `titre normalisé + année`,
-      avec une contrainte de durée (écart strictement inférieur à 10 minutes
+    - Déduplication déterministe des films : fusion par description
+      normalisée identique, puis fusion par `titre normalisé + année` avec
+      une contrainte de durée (écart strictement inférieur à 10 minutes
       lorsque les deux durées sont connues). Les films incompatibles restent
       séparés.
     - Rapprochement `movie_data.csv` → catalogue : identifiants directs
-      lorsque le recouvrement est suffisant, sinon `titre + année`. Les
-      correspondances ambiguës sont écartées.
-    - Les colonnes `description` / `overview` ne sont pas chargées : elles ne
-      servent ni à la matrice ni au contexte.
+      lorsque le recouvrement est suffisant, puis `overview` / `description`,
+      puis `titre + année`. Les correspondances ambiguës sont écartées.
+    - Les descriptions sont chargées uniquement pour la déduplication et le
+      rapprochement ; elles ne sont pas exportées.
     - Les notes sont lues par morceaux, nettoyées puis dédupliquées
       globalement. Les doublons utilisateur-film sont résolus par la dernière
       note si un timestamp fiable existe, sinon par la moyenne des notes
@@ -119,6 +120,7 @@ def _(Path, os):
         "movies": {
             "id": ["id", "movie_id"],
             "title": ["name", "movie_title", "title"],
+            "description": ["description", "overview"],
             "year": ["date", "release_date", "year"],
             "duration": ["minute", "minutes", "runtime", "duration"],
         },
@@ -133,6 +135,7 @@ def _(Path, os):
         "movie_data": {
             "movie_id": ["movie_id", "id"],
             "title": ["movie_title", "title", "name"],
+            "overview": ["overview", "description"],
             "year": ["release_date", "date", "year"],
         },
         "ratings": {
@@ -246,6 +249,7 @@ def _(CONFIG, SOURCE_COLUMNS, SOURCE_PATHS, np, pd, re, unicodedata):
         usecols=[
             _columns["id"],
             _columns["title"],
+            _columns["description"],
             _columns["year"],
             _columns["duration"],
         ],
@@ -255,6 +259,7 @@ def _(CONFIG, SOURCE_COLUMNS, SOURCE_PATHS, np, pd, re, unicodedata):
     movies = pd.DataFrame({
         "source_raw_id": _to_identifier(_movies_raw[_columns["id"]]),
         "title_raw": _movies_raw[_columns["title"]],
+        "description_raw": _movies_raw[_columns["description"]],
         "date_raw": _movies_raw[_columns["year"]],
         "duration_raw": _movies_raw[_columns["duration"]],
     })
@@ -271,6 +276,9 @@ def _(CONFIG, SOURCE_COLUMNS, SOURCE_PATHS, np, pd, re, unicodedata):
     movies["_row_id"] = np.arange(len(movies), dtype=np.int64)
     movies["source_id"] = "gsimonx37:" + movies["source_raw_id"]
     movies["title_norm"] = movies["title_raw"].map(_normalize_text)
+    movies["description_norm"] = movies["description_raw"].map(
+        _normalize_text
+    )
     movies["year"] = pd.to_numeric(
         movies["date_raw"].map(_parse_year),
         errors="coerce",
@@ -280,9 +288,45 @@ def _(CONFIG, SOURCE_COLUMNS, SOURCE_PATHS, np, pd, re, unicodedata):
         errors="coerce",
     )
 
-    _canonical_of = {}
-    _keyed = movies.loc[
-        movies["title_norm"].notna() & movies["year"].notna()
+    _description_root = {}
+    _description_source = movies.loc[
+        movies["description_norm"].notna()
+    ].copy()
+    if len(_description_source):
+        _description_source["_has_duration"] = (
+            _description_source["duration_min"].notna()
+        )
+        _description_source["_has_year"] = (
+            _description_source["year"].notna()
+        )
+        _description_source = _description_source.sort_values(
+            ["_has_duration", "_has_year", "source_raw_id", "_row_id"],
+            ascending=[False, False, True, True],
+        )
+        for _, _description_group in _description_source.groupby(
+            "description_norm",
+            sort=False,
+        ):
+            _representative_id = int(
+                _description_group.iloc[0]["_row_id"]
+            )
+            for _member_id in _description_group["_row_id"].to_numpy():
+                _description_root[int(_member_id)] = _representative_id
+
+    for _row_id in movies["_row_id"].to_numpy():
+        _description_root.setdefault(int(_row_id), int(_row_id))
+
+    movies["description_root_id"] = (
+        movies["_row_id"].map(_description_root).astype("int64")
+    )
+
+    _title_canonical_of = {}
+    _title_source = movies.loc[
+        movies["_row_id"] == movies["description_root_id"]
+    ].copy()
+    _keyed = _title_source.loc[
+        _title_source["title_norm"].notna()
+        & _title_source["year"].notna()
     ].copy()
     _keyed["_group_key"] = (
         _keyed["title_norm"].astype(str)
@@ -311,11 +355,11 @@ def _(CONFIG, SOURCE_COLUMNS, SOURCE_PATHS, np, pd, re, unicodedata):
             _member_duration = _member["duration_min"]
 
             if _member_id == _representative_id:
-                _canonical_of[_member_id] = _representative_id
+                _title_canonical_of[_member_id] = _representative_id
             elif pd.isna(_member_duration) and pd.isna(
                 _representative_duration
             ):
-                _canonical_of[_member_id] = _representative_id
+                _title_canonical_of[_member_id] = _representative_id
             elif (
                 pd.notna(_member_duration)
                 and pd.notna(_representative_duration)
@@ -325,15 +369,17 @@ def _(CONFIG, SOURCE_COLUMNS, SOURCE_PATHS, np, pd, re, unicodedata):
                 )
                 < _duration_tolerance
             ):
-                _canonical_of[_member_id] = _representative_id
+                _title_canonical_of[_member_id] = _representative_id
             else:
-                _canonical_of[_member_id] = _member_id
+                _title_canonical_of[_member_id] = _member_id
 
-    for _row_id in movies["_row_id"].to_numpy():
-        _canonical_of.setdefault(int(_row_id), int(_row_id))
+    for _row_id in _title_source["_row_id"].to_numpy():
+        _title_canonical_of.setdefault(int(_row_id), int(_row_id))
 
     movies["canonical_row_id"] = (
-        movies["_row_id"].map(_canonical_of).astype("int64")
+        movies["description_root_id"]
+        .map(_title_canonical_of)
+        .astype("int64")
     )
     _row_to_source = movies.set_index("_row_id")["source_id"]
     movies["canonical_movie_id"] = movies["canonical_row_id"].map(
@@ -357,11 +403,18 @@ def _(CONFIG, SOURCE_COLUMNS, SOURCE_PATHS, np, pd, re, unicodedata):
                 "source_raw_id",
                 "title_raw",
                 "title_norm",
+                "description_raw",
+                "description_norm",
                 "year",
                 "duration_min",
             ]
         ]
-        .rename(columns={"title_raw": "title"})
+        .rename(
+            columns={
+                "title_raw": "title",
+                "description_raw": "description",
+            }
+        )
         .reset_index(drop=True)
     )
 
@@ -457,6 +510,7 @@ def _(CATALOG, CONFIG, MOVIE_ID_MAPPING, SOURCE_COLUMNS, SOURCE_PATHS, pd, re, u
         usecols=[
             _columns["movie_id"],
             _columns["title"],
+            _columns["overview"],
             _columns["year"],
         ],
         dtype="string",
@@ -470,6 +524,9 @@ def _(CATALOG, CONFIG, MOVIE_ID_MAPPING, SOURCE_COLUMNS, SOURCE_PATHS, pd, re, u
             .replace({"": pd.NA})
         ),
         "title_norm": _movie_data_raw[_columns["title"]].map(
+            _normalize_text
+        ),
+        "overview_norm": _movie_data_raw[_columns["overview"]].map(
             _normalize_text
         ),
         "year": pd.to_numeric(
@@ -494,19 +551,77 @@ def _(CATALOG, CONFIG, MOVIE_ID_MAPPING, SOURCE_COLUMNS, SOURCE_PATHS, pd, re, u
     )
     _use_ids = _overlap >= 0.5
 
+    _accepted_parts = []
+    _remaining = movie_data.copy()
+    _ambiguous = 0
+
     if _use_ids:
         _direct_mapping = MOVIE_ID_MAPPING.rename(
             columns={"source_raw_id": "source_movie_id"}
         )
-        MOVIE_DATA_MAP = movie_data[["source_movie_id"]].merge(
+        _direct_matches = _remaining[["source_movie_id"]].merge(
             _direct_mapping,
             on="source_movie_id",
             how="inner",
             validate="one_to_one",
         )
-        MOVIE_DATA_MAP["match_method"] = "id"
-        _ambiguous = 0
-    else:
+        if len(_direct_matches):
+            _direct_matches["match_method"] = "id"
+            _accepted_parts.append(_direct_matches)
+            _remaining = _remaining.loc[
+                ~_remaining["source_movie_id"].isin(
+                    set(_direct_matches["source_movie_id"])
+                )
+            ].copy()
+
+    if len(_remaining):
+        _catalog_descriptions = (
+            CATALOG[["canonical_movie_id", "description_norm"]]
+            .dropna(subset=["description_norm"])
+        )
+        _description_sizes = _catalog_descriptions.groupby(
+            "description_norm"
+        )["canonical_movie_id"].nunique()
+        _unique_descriptions = _description_sizes[
+            _description_sizes == 1
+        ].index
+        _ambiguous_descriptions = _description_sizes[
+            _description_sizes > 1
+        ].index
+        _catalog_descriptions_unique = _catalog_descriptions.loc[
+            _catalog_descriptions["description_norm"].isin(
+                _unique_descriptions
+            ),
+            ["description_norm", "canonical_movie_id"],
+        ]
+
+        _description_candidates = _remaining.dropna(
+            subset=["overview_norm"]
+        )
+        _description_matches = _description_candidates[
+            ["source_movie_id", "overview_norm"]
+        ].merge(
+            _catalog_descriptions_unique,
+            left_on="overview_norm",
+            right_on="description_norm",
+            how="inner",
+            validate="many_to_one",
+        )[["source_movie_id", "canonical_movie_id"]]
+        _ambiguous += int(
+            _description_candidates["overview_norm"]
+            .isin(_ambiguous_descriptions)
+            .sum()
+        )
+        if len(_description_matches):
+            _description_matches["match_method"] = "description"
+            _accepted_parts.append(_description_matches)
+            _remaining = _remaining.loc[
+                ~_remaining["source_movie_id"].isin(
+                    set(_description_matches["source_movie_id"])
+                )
+            ].copy()
+
+    if len(_remaining):
         _catalog_keys = (
             CATALOG[["canonical_movie_id", "title_norm", "year"]]
             .dropna(subset=["title_norm", "year"])
@@ -527,7 +642,7 @@ def _(CATALOG, CONFIG, MOVIE_ID_MAPPING, SOURCE_COLUMNS, SOURCE_PATHS, pd, re, u
             ["_key", "canonical_movie_id"],
         ]
 
-        _candidates = movie_data.dropna(
+        _candidates = _remaining.dropna(
             subset=["title_norm", "year"]
         ).copy()
         _candidates["_key"] = (
@@ -535,20 +650,33 @@ def _(CATALOG, CONFIG, MOVIE_ID_MAPPING, SOURCE_COLUMNS, SOURCE_PATHS, pd, re, u
             + "|"
             + _candidates["year"].astype("Int64").astype(str)
         )
-        MOVIE_DATA_MAP = _candidates[
+        _title_matches = _candidates[
             ["source_movie_id", "_key"]
         ].merge(
             _catalog_unique,
             on="_key",
             how="inner",
             validate="many_to_one",
-        )
-        MOVIE_DATA_MAP = MOVIE_DATA_MAP[
-            ["source_movie_id", "canonical_movie_id"]
-        ]
-        MOVIE_DATA_MAP["match_method"] = "title_year"
-        _ambiguous = int(
+        )[["source_movie_id", "canonical_movie_id"]]
+        _ambiguous += int(
             _candidates["_key"].isin(_ambiguous_keys).sum()
+        )
+        if len(_title_matches):
+            _title_matches["match_method"] = "title_year"
+            _accepted_parts.append(_title_matches)
+
+    if _accepted_parts:
+        MOVIE_DATA_MAP = pd.concat(
+            _accepted_parts,
+            ignore_index=True,
+        )
+    else:
+        MOVIE_DATA_MAP = pd.DataFrame(
+            columns=[
+                "source_movie_id",
+                "canonical_movie_id",
+                "match_method",
+            ]
         )
 
     MOVIE_DATA_MAP = (
@@ -556,10 +684,15 @@ def _(CATALOG, CONFIG, MOVIE_ID_MAPPING, SOURCE_COLUMNS, SOURCE_PATHS, pd, re, u
         .reset_index(drop=True)
     )
 
+    _methods = (
+        sorted(MOVIE_DATA_MAP["match_method"].dropna().unique().tolist())
+        if len(MOVIE_DATA_MAP)
+        else []
+    )
     MATCH_STATS = {
         "movie_data_rows": int(len(movie_data)),
         "matched": int(len(MOVIE_DATA_MAP)),
-        "method": "id" if _use_ids else "title_year",
+        "method": "+".join(_methods) if _methods else "none",
         "overlap": float(_overlap),
         "ambiguous": int(_ambiguous),
     }
