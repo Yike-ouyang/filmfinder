@@ -21,6 +21,7 @@ def _(mo):
 
 @app.cell
 def _():
+    import hashlib
     import json
     import os
     import time
@@ -37,6 +38,7 @@ def _():
         Counter,
         Path,
         csr_matrix,
+        hashlib,
         hstack,
         json,
         load_npz,
@@ -74,6 +76,7 @@ def _(Path, os):
             PREPROCESSING_DIR / "modeling",
         )
     )
+    CHECKPOINT_DIR = MODEL_OUTPUT_DIR / "checkpoints"
 
     INPUT_FILES = {
         "matrix": PREPROCESSING_DIR / "ratings_matrix.npz",
@@ -92,7 +95,7 @@ def _(Path, os):
             f"Missing: {missing_inputs}"
         )
 
-    return INPUT_FILES, MODEL_OUTPUT_DIR, PREPROCESSING_DIR
+    return CHECKPOINT_DIR, INPUT_FILES, MODEL_OUTPUT_DIR, PREPROCESSING_DIR
 
 
 @app.cell
@@ -291,6 +294,14 @@ def _(mo):
         value=True,
         label="Entraîner les modèles",
     )
+    use_checkpoints = mo.ui.checkbox(
+        value=True,
+        label="Utiliser les checkpoints si disponibles",
+    )
+    force_retrain = mo.ui.checkbox(
+        value=False,
+        label="Forcer le réentraînement (ignorer les checkpoints)",
+    )
 
     mo.vstack([
         mo.hstack(
@@ -313,9 +324,15 @@ def _(mo):
             justify="start",
             gap=2,
         ),
+        mo.hstack(
+            [use_checkpoints, force_retrain],
+            justify="start",
+            gap=2,
+        ),
     ])
     return (
         batch_size,
+        force_retrain,
         learning_rate,
         max_scatter_points,
         n_epochs,
@@ -325,6 +342,7 @@ def _(mo):
         run_training,
         seed,
         train_fraction,
+        use_checkpoints,
         val_fraction,
     )
 
@@ -1052,6 +1070,370 @@ def _(csr_matrix, np, pd, time):
 
 
 @app.cell
+def _(
+    CHECKPOINT_DIR,
+    FMEngine,
+    INPUT_FILES,
+    hashlib,
+    json,
+    np,
+    pd,
+    time,
+):
+    CHECKPOINT_VERSION = "fm-checkpoint-v1"
+
+    def _json_default(value):
+        if isinstance(value, np.integer):
+            return int(value)
+        if isinstance(value, np.floating):
+            return float(value)
+        if isinstance(value, np.bool_):
+            return bool(value)
+        if isinstance(value, np.ndarray):
+            return value.tolist()
+        return str(value)
+
+    def atomic_write_json(path, payload):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _temporary = path.with_name(path.stem + ".tmp" + path.suffix)
+        with open(_temporary, "w") as _handle:
+            json.dump(
+                payload,
+                _handle,
+                indent=2,
+                sort_keys=True,
+                default=_json_default,
+            )
+        _temporary.replace(path)
+
+    def atomic_write_csv(frame, path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _temporary = path.with_name(path.stem + ".tmp" + path.suffix)
+        frame.to_csv(_temporary, index=False)
+        _temporary.replace(path)
+
+    def atomic_savez(path, **arrays):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _temporary = path.with_name(path.stem + ".tmp.npz")
+        np.savez_compressed(_temporary, **arrays)
+        _temporary.replace(path)
+
+    def atomic_write_npy(path, array):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _temporary = path.with_name(path.stem + ".tmp.npy")
+        np.save(_temporary, array)
+        _temporary.replace(path)
+
+    def input_fingerprint(input_files):
+        return {
+            _key: {
+                "size": int(_path.stat().st_size),
+                "mtime_ns": int(_path.stat().st_mtime_ns),
+            }
+            for _key, _path in input_files.items()
+        }
+
+    def checkpoint_signature(payload):
+        _encoded = json.dumps(
+            payload,
+            sort_keys=True,
+            default=_json_default,
+        ).encode("utf-8")
+        return hashlib.sha256(_encoded).hexdigest()
+
+    def model_signature(spec, run_context):
+        _mask = np.asarray(spec["active_mask"], dtype=np.uint8)
+        return checkpoint_signature({
+            "version": CHECKPOINT_VERSION,
+            "inputs": run_context["inputs"],
+            "split": run_context["split"],
+            "hyperparameters": run_context["hyperparameters"],
+            "model": {
+                "name": spec["name"],
+                "family": spec["family"],
+                "feature_set": spec["feature_set"],
+                "n_features": int(spec["n_features"]),
+                "use_linear": bool(spec["use_linear"]),
+                "use_latent": bool(spec["use_latent"]),
+                "active_mask_hash": hashlib.sha256(
+                    _mask.tobytes()
+                ).hexdigest(),
+            },
+        })
+
+    def ablation_signature(
+        variant,
+        active_mask,
+        run_context,
+        c4_signature,
+    ):
+        _mask = np.asarray(active_mask, dtype=np.uint8)
+        return checkpoint_signature({
+            "version": CHECKPOINT_VERSION,
+            "inputs": run_context["inputs"],
+            "split": run_context["split"],
+            "hyperparameters": run_context["hyperparameters"],
+            "ablation": {
+                "variant": variant,
+                "n_features": int(len(_mask)),
+                "active_mask_hash": hashlib.sha256(
+                    _mask.tobytes()
+                ).hexdigest(),
+            },
+            "c4_signature": c4_signature,
+        })
+
+    def checkpoint_paths(kind, name):
+        _base = CHECKPOINT_DIR / kind / name
+        return {
+            "dir": _base,
+            "params": _base / "params.npz",
+            "history": _base / "history.csv",
+            "val_prediction": _base / "val_prediction.npy",
+            "test_prediction": _base / "test_prediction.npy",
+            "prediction_frame": _base / "prediction_frame.csv",
+            "metric": _base / "metric.csv",
+            "metadata": _base / "metadata.json",
+            "signature": _base / "signature.json",
+        }
+
+    def _engine_arrays(engine):
+        return {
+            "w0": np.array([engine.w0], dtype=np.float64),
+            "w": np.asarray(engine.w, dtype=np.float64),
+            "V": np.asarray(engine.V, dtype=np.float64),
+            "active_mask": np.asarray(
+                engine.active_mask,
+                dtype=bool,
+            ),
+            "n_features": np.array(
+                [engine.n_features],
+                dtype=np.int64,
+            ),
+            "n_factors": np.array(
+                [engine.n_factors],
+                dtype=np.int64,
+            ),
+            "use_linear": np.array(
+                [engine.use_linear],
+                dtype=bool,
+            ),
+            "use_latent": np.array(
+                [engine.use_latent],
+                dtype=bool,
+            ),
+            "learning_rate": np.array(
+                [engine.learning_rate],
+                dtype=np.float64,
+            ),
+            "reg_bias": np.array(
+                [engine.reg_bias],
+                dtype=np.float64,
+            ),
+            "reg_factors": np.array(
+                [engine.reg_factors],
+                dtype=np.float64,
+            ),
+        }
+
+    def save_model_checkpoint(
+        name,
+        signature,
+        engine,
+        history,
+        val_prediction,
+        test_prediction,
+        prediction_frame,
+        metric_row,
+        metadata,
+    ):
+        _paths = checkpoint_paths("models", name)
+        _paths["dir"].mkdir(parents=True, exist_ok=True)
+        atomic_savez(_paths["params"], **_engine_arrays(engine))
+        atomic_write_csv(history, _paths["history"])
+        atomic_write_npy(_paths["val_prediction"], val_prediction)
+        atomic_write_npy(_paths["test_prediction"], test_prediction)
+        atomic_write_csv(
+            prediction_frame,
+            _paths["prediction_frame"],
+        )
+        atomic_write_csv(
+            pd.DataFrame([metric_row]),
+            _paths["metric"],
+        )
+        atomic_write_json(
+            _paths["metadata"],
+            {
+                **metadata,
+                "signature": signature,
+                "saved_at": time.strftime(
+                    "%Y-%m-%dT%H:%M:%SZ",
+                    time.gmtime(),
+                ),
+            },
+        )
+        atomic_write_json(
+            _paths["signature"],
+            {"signature": signature},
+        )
+        return _paths
+
+    def load_model_checkpoint(name, expected_signature):
+        _paths = checkpoint_paths("models", name)
+        _required = [
+            _paths["params"],
+            _paths["history"],
+            _paths["val_prediction"],
+            _paths["test_prediction"],
+            _paths["prediction_frame"],
+            _paths["metric"],
+            _paths["signature"],
+        ]
+        if not all(_path.exists() for _path in _required):
+            return None
+
+        try:
+            with open(_paths["signature"]) as _handle:
+                _signature_payload = json.load(_handle)
+            if _signature_payload.get("signature") != expected_signature:
+                return None
+
+            with np.load(_paths["params"]) as _params:
+                _engine = FMEngine(
+                    n_features=int(_params["n_features"][0]),
+                    n_factors=int(_params["n_factors"][0]),
+                    use_linear=bool(_params["use_linear"][0]),
+                    use_latent=bool(_params["use_latent"][0]),
+                    active_mask=_params["active_mask"].astype(bool),
+                    learning_rate=float(_params["learning_rate"][0]),
+                    reg_bias=float(_params["reg_bias"][0]),
+                    reg_factors=float(_params["reg_factors"][0]),
+                    seed=0,
+                )
+                _engine.w0 = float(_params["w0"][0])
+                _engine.w = _params["w"].copy()
+                _engine.V = _params["V"].copy()
+
+            _history = pd.read_csv(_paths["history"])
+            _val_prediction = np.load(_paths["val_prediction"])
+            _test_prediction = np.load(_paths["test_prediction"])
+            _prediction_frame = pd.read_csv(
+                _paths["prediction_frame"]
+            )
+            _metric_row = pd.read_csv(
+                _paths["metric"]
+            ).iloc[0].to_dict()
+        except Exception:
+            return None
+
+        return {
+            "engine": _engine,
+            "history": _history,
+            "val_prediction": _val_prediction,
+            "test_prediction": _test_prediction,
+            "prediction_frame": _prediction_frame,
+            "metric_row": _metric_row,
+            "paths": _paths,
+        }
+
+    def save_ablation_checkpoint(
+        variant,
+        signature,
+        engine,
+        history,
+        metric_row,
+        metadata,
+    ):
+        _paths = checkpoint_paths("ablations", variant)
+        _paths["dir"].mkdir(parents=True, exist_ok=True)
+        atomic_savez(_paths["params"], **_engine_arrays(engine))
+        atomic_write_csv(history, _paths["history"])
+        atomic_write_csv(
+            pd.DataFrame([metric_row]),
+            _paths["metric"],
+        )
+        atomic_write_json(
+            _paths["metadata"],
+            {
+                **metadata,
+                "signature": signature,
+                "saved_at": time.strftime(
+                    "%Y-%m-%dT%H:%M:%SZ",
+                    time.gmtime(),
+                ),
+            },
+        )
+        atomic_write_json(
+            _paths["signature"],
+            {"signature": signature},
+        )
+        return _paths
+
+    def load_ablation_checkpoint(variant, expected_signature):
+        _paths = checkpoint_paths("ablations", variant)
+        _required = [
+            _paths["history"],
+            _paths["metric"],
+            _paths["signature"],
+        ]
+        if not all(_path.exists() for _path in _required):
+            return None
+
+        try:
+            with open(_paths["signature"]) as _handle:
+                _signature_payload = json.load(_handle)
+            if _signature_payload.get("signature") != expected_signature:
+                return None
+            _history = pd.read_csv(_paths["history"])
+            _metric_row = pd.read_csv(
+                _paths["metric"]
+            ).iloc[0].to_dict()
+        except Exception:
+            return None
+
+        return {
+            "history": _history,
+            "metric_row": _metric_row,
+            "paths": _paths,
+        }
+
+    def make_checkpoint_status(
+        name,
+        status,
+        signature,
+        paths,
+        duration=None,
+        reason="",
+    ):
+        return {
+            "name": name,
+            "status": status,
+            "signature": signature[:16],
+            "checkpoint_dir": str(paths["dir"]) if paths else "",
+            "duration_seconds": (
+                float(duration) if duration is not None else None
+            ),
+            "reason": reason,
+        }
+
+    return (
+        CHECKPOINT_VERSION,
+        ablation_signature,
+        atomic_write_csv,
+        atomic_write_json,
+        checkpoint_paths,
+        checkpoint_signature,
+        input_fingerprint,
+        load_ablation_checkpoint,
+        load_model_checkpoint,
+        make_checkpoint_status,
+        model_signature,
+        save_ablation_checkpoint,
+        save_model_checkpoint,
+    )
+
+
+@app.cell
 def _(mo):
     mo.md(r"""
     ## 7. Training the eight models
@@ -1065,14 +1447,24 @@ def _(mo):
 
 @app.cell
 def _(
+    CHECKPOINT_DIR,
+    CHECKPOINT_VERSION,
     FMEngine,
+    INPUT_FILES,
+    atomic_write_csv,
+    atomic_write_json,
     batch_size,
     compute_metrics,
     count_parameters,
     csr_matrix,
     feature_data,
+    force_retrain,
+    input_fingerprint,
     learning_rate,
+    load_model_checkpoint,
+    make_checkpoint_status,
     mo,
+    model_signature,
     n_epochs,
     n_factors,
     np,
@@ -1080,20 +1472,49 @@ def _(
     reg_bias,
     reg_factors,
     run_training,
+    save_model_checkpoint,
     seed,
+    time,
     train_fm_model,
+    train_fraction,
+    use_checkpoints,
+    val_fraction,
     y_test,
     y_train,
     y_val,
 ):
-    if not run_training.value:
+    _training_enabled = bool(run_training.value)
+    _use_checkpoints = (
+        bool(use_checkpoints.value)
+        and not bool(force_retrain.value)
+    )
+
+    if not _training_enabled and not _use_checkpoints:
         mo.stop(
             True,
             mo.md(
-                "Entraînement désactivé. Cochez « Entraîner les modèles » "
-                "pour lancer les calculs."
+                "Entraînement désactivé et lecture des checkpoints "
+                "désactivée. Activez « Utiliser les checkpoints » ou "
+                "« Entraîner les modèles »."
             ),
         )
+
+    _run_context = {
+        "inputs": input_fingerprint(INPUT_FILES),
+        "split": {
+            "seed": int(seed.value),
+            "train_fraction": float(train_fraction.value),
+            "val_fraction": float(val_fraction.value),
+        },
+        "hyperparameters": {
+            "n_factors": int(n_factors.value),
+            "learning_rate": float(learning_rate.value),
+            "reg_bias": float(reg_bias.value),
+            "reg_factors": float(reg_factors.value),
+            "n_epochs": int(n_epochs.value),
+            "batch_size": int(batch_size.value),
+        },
+    }
 
     _n_users = feature_data["n_users"]
 
@@ -1192,8 +1613,48 @@ def _(
     metric_rows = []
     history_frames = []
     prediction_frames = []
+    _checkpoint_rows = []
 
     for _model_index, _spec in enumerate(_model_specs):
+        _signature = model_signature(_spec, _run_context)
+        _checkpoint = (
+            load_model_checkpoint(_spec["name"], _signature)
+            if _use_checkpoints
+            else None
+        )
+
+        if _checkpoint is not None:
+            models[_spec["name"]] = {
+                "engine": _checkpoint["engine"],
+                "history": _checkpoint["history"],
+                "spec": _spec,
+                "val_prediction": _checkpoint["val_prediction"],
+                "test_prediction": _checkpoint["test_prediction"],
+                "prediction_frame": _checkpoint["prediction_frame"],
+            }
+            history_frames.append(_checkpoint["history"])
+            prediction_frames.append(_checkpoint["prediction_frame"])
+            metric_rows.append(_checkpoint["metric_row"])
+            _checkpoint_rows.append(
+                make_checkpoint_status(
+                    _spec["name"],
+                    "loaded",
+                    _signature,
+                    _checkpoint["paths"],
+                )
+            )
+            continue
+
+        if not _training_enabled:
+            mo.stop(
+                True,
+                mo.md(
+                    f"Checkpoint absent ou invalide pour "
+                    f"`{_spec['name']}`. Cochez « Entraîner les "
+                    "modèles » pour le produire."
+                ),
+            )
+
         if _spec["feature_set"] == "none":
             _X_train = _empty_train
             _X_val = _empty_val
@@ -1273,7 +1734,7 @@ def _(
             "prediction_frame": _prediction_frame,
         }
 
-        metric_rows.append({
+        _metric_row = {
             "model": _spec["name"],
             "family": _spec["family"],
             "feature_set": _spec["feature_set"],
@@ -1303,12 +1764,68 @@ def _(
             "test_p90_ae": _test_metrics["p90_ae"],
             "test_pct_lt_0_5": _test_metrics["pct_lt_0_5"],
             "test_pct_lt_1": _test_metrics["pct_lt_1"],
-        })
+        }
+        metric_rows.append(_metric_row)
+
+        _paths = save_model_checkpoint(
+            name=_spec["name"],
+            signature=_signature,
+            engine=_engine,
+            history=_history,
+            val_prediction=_val_pred,
+            test_prediction=_test_pred,
+            prediction_frame=_prediction_frame,
+            metric_row=_metric_row,
+            metadata={
+                "model": _spec["name"],
+                "spec": {
+                    "family": _spec["family"],
+                    "feature_set": _spec["feature_set"],
+                    "n_features": _spec["n_features"],
+                    "use_linear": _spec["use_linear"],
+                    "use_latent": _spec["use_latent"],
+                },
+                "run_context": _run_context,
+            },
+        )
+        _checkpoint_rows.append(
+            make_checkpoint_status(
+                _spec["name"],
+                "trained",
+                _signature,
+                _paths,
+                duration=_training_time,
+            )
+        )
+
+    model_checkpoint_status = pd.DataFrame(_checkpoint_rows)
+    atomic_write_csv(
+        model_checkpoint_status,
+        CHECKPOINT_DIR / "model_checkpoint_status.csv",
+    )
+    atomic_write_json(
+        CHECKPOINT_DIR / "manifest.json",
+        {
+            "version": CHECKPOINT_VERSION,
+            "saved_at": time.strftime(
+                "%Y-%m-%dT%H:%M:%SZ",
+                time.gmtime(),
+            ),
+            "run_context": _run_context,
+            "models": model_checkpoint_status.to_dict("records"),
+        },
+    )
 
     metrics = pd.DataFrame(metric_rows)
     histories = pd.concat(history_frames, ignore_index=True)
     predictions = pd.concat(prediction_frames, ignore_index=True)
-    return histories, metrics, models, predictions
+    return (
+        histories,
+        metrics,
+        model_checkpoint_status,
+        models,
+        predictions,
+    )
 
 
 @app.cell
@@ -2333,11 +2850,23 @@ def _(mo):
 
 @app.cell
 def _(
+    CHECKPOINT_DIR,
+    CHECKPOINT_VERSION,
+    INPUT_FILES,
+    ablation_signature,
+    atomic_write_csv,
+    atomic_write_json,
     batch_size,
     compute_metrics,
     feature_data,
+    force_retrain,
+    input_fingerprint,
     learning_rate,
+    load_ablation_checkpoint,
+    make_checkpoint_status,
     metrics,
+    mo,
+    model_signature,
     models,
     n_epochs,
     n_factors,
@@ -2345,11 +2874,54 @@ def _(
     pd,
     reg_bias,
     reg_factors,
+    run_training,
+    save_ablation_checkpoint,
     seed,
+    time,
     train_fm_model,
+    train_fraction,
+    use_checkpoints,
+    val_fraction,
     y_train,
     y_val,
 ):
+    _training_enabled = bool(run_training.value)
+    _use_checkpoints = (
+        bool(use_checkpoints.value)
+        and not bool(force_retrain.value)
+    )
+
+    if not _training_enabled and not _use_checkpoints:
+        mo.stop(
+            True,
+            mo.md(
+                "Entraînement désactivé et lecture des checkpoints "
+                "désactivée. Activez « Utiliser les checkpoints » ou "
+                "« Entraîner les modèles »."
+            ),
+        )
+
+    _run_context = {
+        "inputs": input_fingerprint(INPUT_FILES),
+        "split": {
+            "seed": int(seed.value),
+            "train_fraction": float(train_fraction.value),
+            "val_fraction": float(val_fraction.value),
+        },
+        "hyperparameters": {
+            "n_factors": int(n_factors.value),
+            "learning_rate": float(learning_rate.value),
+            "reg_bias": float(reg_bias.value),
+            "reg_factors": float(reg_factors.value),
+            "n_epochs": int(n_epochs.value),
+            "batch_size": int(batch_size.value),
+        },
+    }
+    _c4_signature = model_signature(
+        models["C4_full"]["spec"],
+        _run_context,
+    )
+
     _context = feature_data["context"]
     _groups = _context["groups"]
 
@@ -2370,12 +2942,47 @@ def _(
 
     _ablation_rows = []
     _ablation_models = {}
+    _checkpoint_rows = []
 
     _full_metrics = metrics.loc[
         metrics["model"] == "C4_full"
     ].iloc[0]
 
     for _index, (_name, _active_mask) in enumerate(_ablation_specs):
+        _signature = ablation_signature(
+            _name,
+            _active_mask,
+            _run_context,
+            _c4_signature,
+        )
+        _checkpoint = (
+            load_ablation_checkpoint(_name, _signature)
+            if _use_checkpoints
+            else None
+        )
+
+        if _checkpoint is not None:
+            _ablation_rows.append(_checkpoint["metric_row"])
+            _checkpoint_rows.append(
+                make_checkpoint_status(
+                    _name,
+                    "loaded",
+                    _signature,
+                    _checkpoint["paths"],
+                )
+            )
+            continue
+
+        if not _training_enabled:
+            mo.stop(
+                True,
+                mo.md(
+                    f"Checkpoint absent ou invalide pour l'ablation "
+                    f"`{_name}`. Cochez « Entraîner les modèles » "
+                    "pour le produire."
+                ),
+            )
+
         _X_train = _context["splits"]["train"]["x"]
         _X_val = _context["splits"]["val"]["x"]
         (
@@ -2406,7 +3013,7 @@ def _(
             _engine.predict(_X_val),
         )
         _ablation_models[_name] = _engine
-        _ablation_rows.append({
+        _metric_row = {
             "variant": _name,
             "val_mae": _val_metrics["mae"],
             "val_rmse": _val_metrics["rmse"],
@@ -2415,7 +3022,30 @@ def _(
             "best_epoch": _best_epoch,
             "epochs_run": _epochs_run,
             "training_time_seconds": _training_time,
-        })
+        }
+        _ablation_rows.append(_metric_row)
+
+        _paths = save_ablation_checkpoint(
+            variant=_name,
+            signature=_signature,
+            engine=_engine,
+            history=_history,
+            metric_row=_metric_row,
+            metadata={
+                "variant": _name,
+                "run_context": _run_context,
+                "c4_signature": _c4_signature,
+            },
+        )
+        _checkpoint_rows.append(
+            make_checkpoint_status(
+                _name,
+                "trained",
+                _signature,
+                _paths,
+                duration=_training_time,
+            )
+        )
 
     _no_latent = metrics.loc[metrics["model"] == "C2_linear"].iloc[0]
     _no_linear = metrics.loc[metrics["model"] == "C3_latent"].iloc[0]
@@ -2444,7 +3074,87 @@ def _(
     ])
 
     ablations = pd.DataFrame(_ablation_rows).sort_values("delta_mae")
-    return (ablations,)
+
+    ablation_checkpoint_status = pd.DataFrame(_checkpoint_rows)
+    atomic_write_csv(
+        ablation_checkpoint_status,
+        CHECKPOINT_DIR / "ablation_checkpoint_status.csv",
+    )
+    atomic_write_json(
+        CHECKPOINT_DIR / "ablation_manifest.json",
+        {
+            "version": CHECKPOINT_VERSION,
+            "saved_at": time.strftime(
+                "%Y-%m-%dT%H:%M:%SZ",
+                time.gmtime(),
+            ),
+            "run_context": _run_context,
+            "c4_signature": _c4_signature,
+            "ablations": ablation_checkpoint_status.to_dict("records"),
+        },
+    )
+    return (ablations, ablation_checkpoint_status)
+
+
+@app.cell
+def _(
+    CHECKPOINT_DIR,
+    ablation_checkpoint_status,
+    atomic_write_csv,
+    checks_loading_df,
+    data_summary,
+    feature_summary,
+    model_checkpoint_status,
+    mo,
+    split_summary,
+):
+    CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+    _stage_dir = CHECKPOINT_DIR / "stage_tables"
+    atomic_write_csv(
+        data_summary,
+        _stage_dir / "data_summary.csv",
+    )
+    atomic_write_csv(
+        checks_loading_df,
+        _stage_dir / "checks_loading.csv",
+    )
+    atomic_write_csv(
+        split_summary,
+        _stage_dir / "split_summary.csv",
+    )
+    atomic_write_csv(
+        feature_summary,
+        _stage_dir / "feature_summary.csv",
+    )
+
+    _model_loaded = int(
+        (model_checkpoint_status["status"] == "loaded").sum()
+    )
+    _model_trained = int(
+        (model_checkpoint_status["status"] == "trained").sum()
+    )
+    _ablation_loaded = int(
+        (ablation_checkpoint_status["status"] == "loaded").sum()
+    )
+    _ablation_trained = int(
+        (ablation_checkpoint_status["status"] == "trained").sum()
+    )
+
+    mo.vstack([
+        mo.md(
+            "## Checkpoints\n\n"
+            f"- Modèles rechargés : {_model_loaded} | "
+            f"réentraînés : {_model_trained}\n"
+            f"- Ablations rechargées : {_ablation_loaded} | "
+            f"réentraînées : {_ablation_trained}"
+        ),
+        mo.ui.table(model_checkpoint_status, pagination=False),
+        mo.ui.table(
+            ablation_checkpoint_status,
+            pagination=False,
+        ),
+    ])
+    return
 
 
 @app.cell
