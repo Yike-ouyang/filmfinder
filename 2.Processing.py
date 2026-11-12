@@ -101,12 +101,12 @@ def _(Path, os):
 @app.cell
 def _(INPUT_FILES, load_npz, np, pd):
     ratings_matrix = load_npz(INPUT_FILES["matrix"]).tocsr()
-    n_users, n_movies = ratings_matrix.shape
+    _n_users, _n_movies = ratings_matrix.shape
 
     user_ids = np.load(INPUT_FILES["users"], allow_pickle=True)
     movie_ids = np.load(INPUT_FILES["movies"], allow_pickle=True)
 
-    if len(user_ids) != n_users or len(movie_ids) != n_movies:
+    if len(user_ids) != _n_users or len(movie_ids) != _n_movies:
         raise ValueError(
             "Mismatch between the ratings matrix shape and the ID arrays: "
             f"matrix={ratings_matrix.shape}, "
@@ -115,11 +115,11 @@ def _(INPUT_FILES, load_npz, np, pd):
 
     user_mapping = pd.DataFrame({
         "user_id": user_ids,
-        "row_index": np.arange(n_users),
+        "row_index": np.arange(_n_users),
     })
     movie_mapping = pd.DataFrame({
         "canonical_movie_id": movie_ids,
-        "col_index": np.arange(n_movies),
+        "col_index": np.arange(_n_movies),
     })
 
     movie_context = pd.read_json(INPUT_FILES["context"])
@@ -130,10 +130,10 @@ def _(INPUT_FILES, load_npz, np, pd):
     })
     movie_context["col_index"] = np.arange(len(movie_context))
 
-    if len(movie_context) != n_movies:
+    if len(movie_context) != _n_movies:
         raise ValueError(
             "movie_context row count does not match the matrix columns: "
-            f"context={len(movie_context)}, movies={n_movies}."
+            f"context={len(movie_context)}, movies={_n_movies}."
         )
 
     if (
