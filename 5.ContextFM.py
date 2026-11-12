@@ -1265,6 +1265,39 @@ def _(
         "epochs_run",
     ]
 
+    _numeric_columns = [
+        "reg_bias",
+        "reg_factors",
+        "n_factors",
+        "learning_rate",
+        "n_epochs",
+        "batch_size",
+        "seed",
+        "train_mae",
+        "val_mae",
+        "val_rmse",
+        "val_bias",
+        "std_pred",
+        "mean_abs_user_bias",
+        "mean_abs_film_bias",
+        "mean_abs_user_film_dot",
+        "mean_v_norm",
+        "n_parameters",
+        "training_time_seconds",
+        "best_epoch",
+        "epochs_run",
+    ]
+
+    def _coerce_search_results(frame):
+        _frame = frame.copy()
+        for _column in _numeric_columns:
+            if _column in _frame.columns:
+                _frame[_column] = pd.to_numeric(
+                    _frame[_column],
+                    errors="coerce",
+                )
+        return _frame
+
     if _search_path.exists():
         _existing = pd.read_csv(_search_path)
         if set(_columns).issubset(_existing.columns):
@@ -1273,6 +1306,8 @@ def _(
             _search_results = pd.DataFrame(columns=_columns)
     else:
         _search_results = pd.DataFrame(columns=_columns)
+
+    _search_results = _coerce_search_results(_search_results)
 
     _config_mask = (
         (_search_results["n_factors"] == int(n_factors.value))
@@ -1440,7 +1475,11 @@ def _(
             "epochs_run": _epochs_run,
         }
 
-        _search_results.loc[len(_search_results)] = _row
+        _search_results = pd.concat(
+            [_search_results, pd.DataFrame([_row])],
+            ignore_index=True,
+        )
+        _search_results = _coerce_search_results(_search_results)
         _session_engines[_key] = _engine
         _save_search_results()
         print(
