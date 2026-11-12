@@ -10,11 +10,11 @@ def _(mo):
     # FilmFinder — Factorization Machines and diagnostics
 
     This notebook trains explicit Factorization Machine models on the CSR
-    matrix exported by `1.Preprocessing.py`. It compares user–film models with
+    matrix exported by `data_cleaning.py`. It compares user–film models with
     contextual models that use genres, release year and studios, then analyses
     errors, contributions and ablations.
 
-    No file produced by `1.Preprocessing.py` is modified.
+    No file produced by `data_cleaning.py` is modified.
     """)
     return
 
@@ -56,7 +56,7 @@ def _(mo):
     mo.md(r"""
     ## 1. Configuration and output paths
 
-    The notebook reads the exports from `1.Preprocessing.py`. The modelling
+    The notebook reads the exports from `data_cleaning.py`. The modelling
     outputs are written to a dedicated subdirectory.
     """)
     return
@@ -64,25 +64,25 @@ def _(mo):
 
 @app.cell
 def _(Path, os):
-    PREPROCESSING_DIR = Path(
+    CLEANING_DIR = Path(
         os.environ.get(
-            "FILMFINDER_OUTPUT_DIR",
-            Path.cwd() / "outputs",
+            "FILMFINDER_CLEANING_DIR",
+            Path.cwd(),
         )
     )
     MODEL_OUTPUT_DIR = Path(
         os.environ.get(
             "FILMFINDER_MODEL_OUTPUT_DIR",
-            PREPROCESSING_DIR / "modeling",
+            CLEANING_DIR / "modeling",
         )
     )
     CHECKPOINT_DIR = MODEL_OUTPUT_DIR / "checkpoints"
 
     INPUT_FILES = {
-        "matrix": PREPROCESSING_DIR / "ratings_matrix.npz",
-        "users": PREPROCESSING_DIR / "user_mapping.parquet",
-        "movies": PREPROCESSING_DIR / "movie_mapping.parquet",
-        "context": PREPROCESSING_DIR / "movie_context.parquet",
+        "matrix": CLEANING_DIR / "ratings_matrix.npz",
+        "users": CLEANING_DIR / "user_ids.npy",
+        "movies": CLEANING_DIR / "movie_ids.npy",
+        "context": CLEANING_DIR / "movie_context.json",
     }
 
     missing_inputs = [
@@ -91,19 +91,59 @@ def _(Path, os):
 
     if missing_inputs:
         raise FileNotFoundError(
-            "Missing preprocessed files. Run 1.Preprocessing.py first. "
+            "Missing files from data_cleaning.py. Run it first. "
             f"Missing: {missing_inputs}"
         )
 
-    return CHECKPOINT_DIR, INPUT_FILES, MODEL_OUTPUT_DIR, PREPROCESSING_DIR
+    return CHECKPOINT_DIR, CLEANING_DIR, INPUT_FILES, MODEL_OUTPUT_DIR
 
 
 @app.cell
-def _(INPUT_FILES, load_npz, pd):
+def _(INPUT_FILES, load_npz, np, pd):
     ratings_matrix = load_npz(INPUT_FILES["matrix"]).tocsr()
-    user_mapping = pd.read_parquet(INPUT_FILES["users"])
-    movie_mapping = pd.read_parquet(INPUT_FILES["movies"])
-    movie_context = pd.read_parquet(INPUT_FILES["context"])
+    n_users, n_movies = ratings_matrix.shape
+
+    user_ids = np.load(INPUT_FILES["users"], allow_pickle=True)
+    movie_ids = np.load(INPUT_FILES["movies"], allow_pickle=True)
+
+    if len(user_ids) != n_users or len(movie_ids) != n_movies:
+        raise ValueError(
+            "Mismatch between the ratings matrix shape and the ID arrays: "
+            f"matrix={ratings_matrix.shape}, "
+            f"users={len(user_ids)}, movies={len(movie_ids)}."
+        )
+
+    user_mapping = pd.DataFrame({
+        "user_id": user_ids,
+        "row_index": np.arange(n_users),
+    })
+    movie_mapping = pd.DataFrame({
+        "canonical_movie_id": movie_ids,
+        "col_index": np.arange(n_movies),
+    })
+
+    movie_context = pd.read_json(INPUT_FILES["context"])
+    movie_context = movie_context.rename(columns={
+        "movie_id": "canonical_movie_id",
+        "date": "year",
+        "studio": "studios",
+    })
+    movie_context["col_index"] = np.arange(len(movie_context))
+
+    if len(movie_context) != n_movies:
+        raise ValueError(
+            "movie_context row count does not match the matrix columns: "
+            f"context={len(movie_context)}, movies={n_movies}."
+        )
+
+    if (
+        movie_context["canonical_movie_id"].astype(str).tolist()
+        != movie_mapping["canonical_movie_id"].astype(str).tolist()
+    ):
+        raise ValueError(
+            "movie_context is not aligned with movie_ids.npy."
+        )
+
     return movie_context, movie_mapping, ratings_matrix, user_mapping
 
 
@@ -137,6 +177,15 @@ def _(movie_context, movie_mapping, np, pd, ratings_matrix, user_mapping):
         "user_mapping_rows": len(user_mapping_sorted),
         "movie_mapping_rows": len(movie_mapping_sorted),
         "context_rows": len(context_sorted),
+        "user_rows_match_matrix": bool(
+            len(user_mapping_sorted) == n_users
+        ),
+        "movie_rows_match_matrix": bool(
+            len(movie_mapping_sorted) == n_movies
+        ),
+        "context_rows_match_matrix": bool(
+            len(context_sorted) == n_movies
+        ),
         "user_indices_contiguous": bool(
             np.array_equal(
                 user_mapping_sorted["row_index"].to_numpy(),
@@ -150,8 +199,10 @@ def _(movie_context, movie_mapping, np, pd, ratings_matrix, user_mapping):
             )
         ),
         "context_aligned": bool(
-            context_sorted["canonical_movie_id"].tolist()
-            == movie_mapping_sorted["canonical_movie_id"].tolist()
+            context_sorted["canonical_movie_id"].astype(str).tolist()
+            == movie_mapping_sorted[
+                "canonical_movie_id"
+            ].astype(str).tolist()
         ),
         "user_ids_unique": bool(
             user_mapping_sorted["user_id"].is_unique
@@ -162,6 +213,9 @@ def _(movie_context, movie_mapping, np, pd, ratings_matrix, user_mapping):
     }
 
     if not all([
+        checks_loading["user_rows_match_matrix"],
+        checks_loading["movie_rows_match_matrix"],
+        checks_loading["context_rows_match_matrix"],
         checks_loading["user_indices_contiguous"],
         checks_loading["movie_indices_contiguous"],
         checks_loading["context_aligned"],
@@ -169,7 +223,7 @@ def _(movie_context, movie_mapping, np, pd, ratings_matrix, user_mapping):
         checks_loading["movie_ids_unique"],
     ]):
         raise ValueError(
-            f"Inconsistent preprocessed files: {checks_loading}"
+            f"Inconsistent input files: {checks_loading}"
         )
 
     matrix_coo = ratings_matrix.tocoo()
@@ -508,12 +562,29 @@ def _(
     pd,
     user_mapping_sorted,
 ):
+    import ast
+
     _n_users = len(user_mapping_sorted)
     _n_movies = len(movie_mapping_sorted)
 
     def _as_list(value):
         if value is None:
             return None
+        if isinstance(value, str):
+            _text = value.strip()
+            if _text.startswith("[") and _text.endswith("]"):
+                try:
+                    value = ast.literal_eval(_text)
+                except (SyntaxError, ValueError):
+                    value = _text
+            elif "," in _text:
+                value = [
+                    _item.strip()
+                    for _item in _text.split(",")
+                    if _item.strip()
+                ]
+            else:
+                value = _text
         if isinstance(value, (list, tuple, set, np.ndarray, pd.Series)):
             return [
                 str(item).strip().casefold()
@@ -3554,25 +3625,27 @@ def _(
     MODEL_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     metrics.to_csv(MODEL_OUTPUT_DIR / "metrics.csv", index=False)
-    histories.to_parquet(
-        MODEL_OUTPUT_DIR / "training_histories.parquet",
+    histories.to_csv(
+        MODEL_OUTPUT_DIR / "training_histories.csv",
         index=False,
     )
-    predictions.to_parquet(
-        MODEL_OUTPUT_DIR / "test_predictions.parquet",
+    predictions.to_csv(
+        MODEL_OUTPUT_DIR / "test_predictions.csv.gz",
         index=False,
+        compression="gzip",
     )
     ablations.to_csv(MODEL_OUTPUT_DIR / "ablations.csv", index=False)
-    context_contribution_stats.to_parquet(
-        MODEL_OUTPUT_DIR / "context_contribution_stats.parquet",
+    context_contribution_stats.to_csv(
+        MODEL_OUTPUT_DIR / "context_contribution_stats.csv",
         index=False,
     )
-    context_contributions.to_parquet(
-        MODEL_OUTPUT_DIR / "context_contributions.parquet",
+    context_contributions.to_csv(
+        MODEL_OUTPUT_DIR / "context_contributions.csv.gz",
         index=False,
+        compression="gzip",
     )
-    simple_decomposition.to_parquet(
-        MODEL_OUTPUT_DIR / "simple_decomposition.parquet",
+    simple_decomposition.to_csv(
+        MODEL_OUTPUT_DIR / "simple_decomposition.csv",
         index=False,
     )
     context_interaction_heatmap.to_csv(
@@ -3603,8 +3676,8 @@ def _(
         "feature_name": feature_data["context"]["names"],
         "family": feature_data["context"]["groups"],
     })
-    _feature_mapping.to_parquet(
-        MODEL_OUTPUT_DIR / "feature_mapping.parquet",
+    _feature_mapping.to_csv(
+        MODEL_OUTPUT_DIR / "feature_mapping.csv",
         index=False,
     )
 
