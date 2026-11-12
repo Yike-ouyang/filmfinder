@@ -32,8 +32,8 @@ def _():
                         else _value
                     )
                 )
-        _path = INTERMEDIATE_DIR / f"{name}.parquet"
-        _out.to_parquet(_path, index=False)
+        _path = INTERMEDIATE_DIR / f"{name}.csv"
+        _out.to_csv(_path, index=False)
         return str(_path)
 
     def make_step_log(
