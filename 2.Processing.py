@@ -76,6 +76,7 @@ def _(Path, os):
         )
     )
     CHECKPOINT_DIR = MODEL_OUTPUT_DIR / "checkpoints"
+    MAX_STUDIOS = 4000
 
     INPUT_FILES = {
         "matrix": CLEANING_DIR / "ratings_matrix.npz",
@@ -93,7 +94,7 @@ def _(Path, os):
             "Missing files from data_cleaning.py. Run it first. "
             f"Missing: {missing_inputs}"
         )
-    return CHECKPOINT_DIR, INPUT_FILES, MODEL_OUTPUT_DIR
+    return CHECKPOINT_DIR, INPUT_FILES, MAX_STUDIOS, MODEL_OUTPUT_DIR
 
 
 @app.cell
@@ -531,7 +532,8 @@ def _(mo):
     Part I uses only user and film one-hot features. Part II adds multi-hot
     genres and studios plus a standardized release year and a missing-year
     indicator. Vocabularies and year statistics are computed on training films
-    only.
+    only. Only the 4000 studios with the most films are retained; other films
+    receive the missing-studio indicator.
     """)
     return
 
@@ -539,6 +541,7 @@ def _(mo):
 @app.cell
 def _(
     Counter,
+    MAX_STUDIOS,
     context_sorted,
     csr_matrix,
     hstack,
@@ -608,17 +611,49 @@ def _(
 
     _train_films = np.sort(obs_train["col"].unique())
     _genre_counter = Counter()
-    _studio_counter = Counter()
     for _film in _train_films:
         _genres = _genres_by_film[_film]
         if _genres:
             _genre_counter.update(set(_genres))
-        _studios = _studios_by_film[_film]
+
+    _studio_counter = Counter()
+    for _studios in _studios_by_film:
         if _studios:
             _studio_counter.update(set(_studios))
 
+    if MAX_STUDIOS <= 0:
+        raise ValueError("MAX_STUDIOS must be positive.")
+
+    _studio_ranked = sorted(
+        _studio_counter.items(),
+        key=lambda item: (-item[1], item[0]),
+    )
     genre_vocab = sorted(_genre_counter)
-    studio_vocab = sorted(_studio_counter)
+    studio_vocab = sorted(
+        studio for studio, _ in _studio_ranked[:MAX_STUDIOS]
+    )
+
+    _retained_studios = set(studio_vocab)
+    _studios_by_film = [
+        (
+            None
+            if _studios is None
+            else (
+                [
+                    _studio
+                    for _studio in _studios
+                    if _studio in _retained_studios
+                ]
+                or None
+            )
+        )
+        for _studios in _studios_by_film
+    ]
+
+    print(
+        f"Studios conservés : {len(studio_vocab):,} / "
+        f"{len(_studio_counter):,}"
+    )
 
     genre_feature_names = (
         ["genre:<UNKNOWN>", "genre:<MISSING>"]
@@ -857,7 +892,7 @@ def _(
 
     # Studios classés par nombre décroissant de films
     studios_ranked = [
-        studio for studio, _ in _studio_counter.most_common()
+        studio for studio, _ in _studio_ranked
     ]
 
     # Nombre de scores par film dans le train
@@ -912,6 +947,13 @@ def _(
         title="Couverture des films"
     )
     axes[0].grid(alpha=0.3)
+    axes[0].axvline(
+        MAX_STUDIOS,
+        color="crimson",
+        linestyle="--",
+        label=f"Top {MAX_STUDIOS}",
+    )
+    axes[0].legend()
 
     axes[1].plot(n_studios, scores_covered)
     axes[1].set(
@@ -920,6 +962,13 @@ def _(
         title="Couverture des scores"
     )
     axes[1].grid(alpha=0.3)
+    axes[1].axvline(
+        MAX_STUDIOS,
+        color="crimson",
+        linestyle="--",
+        label=f"Top {MAX_STUDIOS}",
+    )
+    axes[1].legend()
 
     plt.tight_layout()
     plt.show()
@@ -1206,7 +1255,7 @@ def _(np, pd, time):
 
 @app.cell
 def _(CHECKPOINT_DIR, FMEngine, hashlib, json, np, pd, time):
-    CHECKPOINT_VERSION = "fm-checkpoint-v1"
+    CHECKPOINT_VERSION = "fm-checkpoint-v2"
 
     def _json_default(value):
         if isinstance(value, np.integer):
@@ -1274,6 +1323,7 @@ def _(CHECKPOINT_DIR, FMEngine, hashlib, json, np, pd, time):
             "inputs": run_context["inputs"],
             "split": run_context["split"],
             "hyperparameters": run_context["hyperparameters"],
+            "features": run_context["features"],
             "model": {
                 "name": spec["name"],
                 "family": spec["family"],
@@ -1299,6 +1349,7 @@ def _(CHECKPOINT_DIR, FMEngine, hashlib, json, np, pd, time):
             "inputs": run_context["inputs"],
             "split": run_context["split"],
             "hyperparameters": run_context["hyperparameters"],
+            "features": run_context["features"],
             "ablation": {
                 "variant": variant,
                 "n_features": int(len(_mask)),
@@ -1573,6 +1624,7 @@ def _(
     CHECKPOINT_DIR,
     CHECKPOINT_VERSION,
     INPUT_FILES,
+    MAX_STUDIOS,
     atomic_write_csv,
     atomic_write_json,
     batch_size,
@@ -1635,6 +1687,9 @@ def _(
             "reg_factors": float(reg_factors.value),
             "n_epochs": int(n_epochs.value),
             "batch_size": int(batch_size.value),
+        },
+        "features": {
+            "max_studios": int(MAX_STUDIOS),
         },
     }
 
@@ -2967,6 +3022,7 @@ def _(
     CHECKPOINT_DIR,
     CHECKPOINT_VERSION,
     INPUT_FILES,
+    MAX_STUDIOS,
     ablation_signature,
     atomic_write_csv,
     atomic_write_json,
@@ -3028,6 +3084,9 @@ def _(
             "reg_factors": float(reg_factors.value),
             "n_epochs": int(n_epochs.value),
             "batch_size": int(batch_size.value),
+        },
+        "features": {
+            "max_studios": int(MAX_STUDIOS),
         },
     }
     _c4_signature = model_signature(
@@ -3628,6 +3687,7 @@ def _(mo):
 @app.cell
 def _(
     INPUT_FILES,
+    MAX_STUDIOS,
     MODEL_OUTPUT_DIR,
     ablations,
     batch_size,
@@ -3750,6 +3810,9 @@ def _(
             "test_fraction": float(
                 1 - train_fraction.value - val_fraction.value
             ),
+        },
+        "feature_config": {
+            "max_studios": int(MAX_STUDIOS),
         },
         "context_reconstruction_error": context_reconstruction_error,
         "models": metrics.to_dict("records"),
