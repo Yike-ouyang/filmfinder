@@ -33,7 +33,6 @@ def _():
     import numpy as np
     import pandas as pd
     from scipy.sparse import csr_matrix, hstack, load_npz
-
     return (
         Counter,
         Path,
@@ -94,8 +93,7 @@ def _(Path, os):
             "Missing files from data_cleaning.py. Run it first. "
             f"Missing: {missing_inputs}"
         )
-
-    return CHECKPOINT_DIR, CLEANING_DIR, INPUT_FILES, MODEL_OUTPUT_DIR
+    return CHECKPOINT_DIR, INPUT_FILES, MODEL_OUTPUT_DIR
 
 
 @app.cell
@@ -143,7 +141,6 @@ def _(INPUT_FILES, load_npz, np, pd):
         raise ValueError(
             "movie_context is not aligned with movie_ids.npy."
         )
-
     return movie_context, movie_mapping, ratings_matrix, user_mapping
 
 
@@ -284,7 +281,7 @@ def _(data_summary):
 
 
 @app.cell
-def _(observations, pd):
+def _(observations):
     observations["rating"].describe(
         percentiles=[0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99]
     ).to_frame("rating")
@@ -414,14 +411,7 @@ def _(mo):
 
 
 @app.cell
-def _(
-    np,
-    observations,
-    pd,
-    seed,
-    train_fraction,
-    val_fraction,
-):
+def _(np, observations, pd, seed, train_fraction, val_fraction):
     _train_fraction = float(train_fraction.value)
     _val_fraction = float(val_fraction.value)
     _test_fraction = 1.0 - _train_fraction - _val_fraction
@@ -512,12 +502,10 @@ def _(
         "rating_values": np.sort(obs_train["rating"].unique()),
         "n_train": len(obs_train),
     }
-
     return (
         obs_test,
         obs_train,
         obs_val,
-        sigma_train,
         split_summary,
         test_idx,
         train_idx,
@@ -560,6 +548,7 @@ def _(
     obs_train,
     obs_val,
     pd,
+    plt,
     user_mapping_sorted,
 ):
     import ast
@@ -863,7 +852,83 @@ def _(
         {"feature_set": "studios", "n_features": len(studio_feature_names)},
         {"feature_set": "year", "n_features": 2},
     ])
-    return context_by_col, feature_data, feature_summary
+
+
+
+    # Studios classés par nombre décroissant de films
+    studios_ranked = [
+        studio for studio, _ in _studio_counter.most_common()
+    ]
+
+    # Nombre de scores par film dans le train
+    scores_per_film = (
+        obs_train.groupby("col").size()
+        .reindex(range(_n_movies), fill_value=0)
+        .to_numpy()
+    )
+
+    # Rang de chaque studio
+    studio_rank = {
+        studio: rank
+        for rank, studio in enumerate(studios_ranked)
+    }
+
+    # Pour chaque film, rang du studio le plus fréquent auquel il appartient
+    best_rank = np.full(_n_movies, len(studios_ranked), dtype=int)
+
+    for film in _train_films:
+        studios = _studios_by_film[film]
+
+        if studios:
+            best_rank[film] = min(
+                (studio_rank[s] for s in set(studios) if s in studio_rank),
+                default=len(studios_ranked)
+            )
+
+    # Nombre de films et scores nouvellement couverts à chaque studio ajouté
+    film_gain = np.bincount(
+        best_rank[_train_films],
+        minlength=len(studios_ranked) + 1
+    )[:len(studios_ranked)]
+
+    score_gain = np.bincount(
+        best_rank,
+        weights=scores_per_film,
+        minlength=len(studios_ranked) + 1
+    )[:len(studios_ranked)]
+
+    # Couverture cumulée
+    n_studios = np.arange(1, len(studios_ranked) + 1)
+    films_covered = np.cumsum(film_gain)
+    scores_covered = np.cumsum(score_gain)
+
+    # Visualisation
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    axes[0].plot(n_studios, films_covered)
+    axes[0].set(
+        xlabel="Nombre de studios conservés (Top K)",
+        ylabel="Nombre de films couverts",
+        title="Couverture des films"
+    )
+    axes[0].grid(alpha=0.3)
+
+    axes[1].plot(n_studios, scores_covered)
+    axes[1].set(
+        xlabel="Nombre de studios conservés (Top K)",
+        ylabel="Nombre de scores couverts",
+        title="Couverture des scores"
+    )
+    axes[1].grid(alpha=0.3)
+
+    plt.tight_layout()
+    plt.show()
+    return feature_data, feature_summary
+
+
+@app.cell
+def _():
+    return
 
 
 @app.cell
@@ -885,7 +950,7 @@ def _(mo):
 
 
 @app.cell
-def _(csr_matrix, np, pd, time):
+def _(np, pd, time):
     class FMEngine:
         def __init__(
             self,
@@ -1136,21 +1201,11 @@ def _(csr_matrix, np, pd, time):
         if engine.use_latent:
             _count += int(engine.active_mask.sum()) * engine.n_factors
         return int(_count)
-
     return FMEngine, compute_metrics, count_parameters, train_fm_model
 
 
 @app.cell
-def _(
-    CHECKPOINT_DIR,
-    FMEngine,
-    INPUT_FILES,
-    hashlib,
-    json,
-    np,
-    pd,
-    time,
-):
+def _(CHECKPOINT_DIR, FMEngine, hashlib, json, np, pd, time):
     CHECKPOINT_VERSION = "fm-checkpoint-v1"
 
     def _json_default(value):
@@ -1486,14 +1541,11 @@ def _(
             ),
             "reason": reason,
         }
-
     return (
         CHECKPOINT_VERSION,
         ablation_signature,
         atomic_write_csv,
         atomic_write_json,
-        checkpoint_paths,
-        checkpoint_signature,
         input_fingerprint,
         load_ablation_checkpoint,
         load_model_checkpoint,
@@ -1520,7 +1572,6 @@ def _(mo):
 def _(
     CHECKPOINT_DIR,
     CHECKPOINT_VERSION,
-    FMEngine,
     INPUT_FILES,
     atomic_write_csv,
     atomic_write_json,
@@ -1890,13 +1941,7 @@ def _(
     metrics = pd.DataFrame(metric_rows)
     histories = pd.concat(history_frames, ignore_index=True)
     predictions = pd.concat(prediction_frames, ignore_index=True)
-    return (
-        histories,
-        metrics,
-        model_checkpoint_status,
-        models,
-        predictions,
-    )
+    return histories, metrics, model_checkpoint_status, models, predictions
 
 
 @app.cell
@@ -2020,7 +2065,7 @@ def _(mo):
 
 
 @app.cell
-def _(models, mo):
+def _(mo, models):
     selected_model = mo.ui.dropdown(
         options=list(models.keys()),
         value="M4_full",
@@ -2056,7 +2101,6 @@ def _(models, selected_model, train_stats):
     diagnostic_frame["film_mean_train"] = (
         diagnostic_frame["col"].map(train_stats["film_mean"])
     )
-
     return (diagnostic_frame,)
 
 
@@ -2236,8 +2280,7 @@ def _(np, pd, plt):
             else pd.DataFrame()
         )
         return _figure, _bin_table
-
-    return (compute_bin_curve, make_diagnostic_figure, subsample_frame)
+    return (make_diagnostic_figure,)
 
 
 @app.cell
@@ -2245,8 +2288,8 @@ def _(
     diagnostic_frame,
     make_diagnostic_figure,
     max_scatter_points,
-    selected_model,
     seed,
+    selected_model,
 ):
     diagnostic_plot_figure, diagnostic_bin_table = make_diagnostic_figure(
         diagnostic_frame,
@@ -2693,7 +2736,7 @@ def _(mo):
 
 
 @app.cell
-def _(feature_data, models, np, pd, y_test):
+def _(feature_data, models, np, pd):
     _engine = models["M4_full"]["engine"]
     _X_test = feature_data["part1"]["splits"]["test"]["x"]
     _obs = feature_data["part1"]["splits"]["test"]["obs"]
@@ -2749,7 +2792,7 @@ def _(simple_component_stats):
 
 
 @app.cell
-def _(simple_decomposition, plt):
+def _(plt, simple_decomposition):
     _components = ["user_bias", "film_bias", "interaction"]
     _figure, _axes = plt.subplots(1, 3, figsize=(18, 5))
     for _axis, _component in zip(_axes, _components):
@@ -2876,7 +2919,7 @@ def _(context_contribution_stats):
 
 
 @app.cell
-def _(context_interaction_heatmap, np, plt):
+def _(context_interaction_heatmap, plt):
     _figure, _axis = plt.subplots(figsize=(8, 6))
     _image = _axis.imshow(
         context_interaction_heatmap.to_numpy(),
@@ -2900,10 +2943,10 @@ def _(context_interaction_heatmap, np, plt):
 
 @app.cell
 def _(context_reconstruction_error, mo):
-    mo.md(
-        f"Erreur maximale de reconstruction des contributions : "
-        f"`{context_reconstruction_error:.3e}`"
-    )
+    mo.md(f"""
+    Erreur maximale de reconstruction des contributions : "
+        f"`{context_reconstruction_error:.3e}`
+    """)
     return
 
 
@@ -2941,7 +2984,6 @@ def _(
     models,
     n_epochs,
     n_factors,
-    np,
     pd,
     reg_bias,
     reg_factors,
@@ -3164,7 +3206,7 @@ def _(
             "ablations": ablation_checkpoint_status.to_dict("records"),
         },
     )
-    return (ablations, ablation_checkpoint_status)
+    return ablation_checkpoint_status, ablations
 
 
 @app.cell
@@ -3175,8 +3217,8 @@ def _(
     checks_loading_df,
     data_summary,
     feature_summary,
-    model_checkpoint_status,
     mo,
+    model_checkpoint_status,
     split_summary,
 ):
     CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
@@ -3329,7 +3371,7 @@ def _(diagnosis):
 
 
 @app.cell
-def _(models, np, pd, train_stats):
+def _(models, pd, train_stats):
     _frame = models["C4_full"]["prediction_frame"].copy()
     _frame["user_activity"] = (
         _frame["row"].map(train_stats["user_counts"]).fillna(0)
@@ -3458,9 +3500,9 @@ def _(
     obs_test,
     pd,
     ratings_matrix,
+    test_idx,
     train_idx,
     val_idx,
-    test_idx,
 ):
     _checks = []
 

@@ -12,3 +12,8 @@ notes.md
 prompts
 results_intermediate/
 outputs/
+data/
+movie_context.json
+movie_ids.npy
+ratings_matrix.npz
+user_ids.npy
