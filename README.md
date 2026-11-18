@@ -22,6 +22,11 @@ Film recommendation system built from a Letterboxd profile.
 │   ├── notes.md                         # local notes (ignored by git)
 │   ├── filmfinder_flowchart.pdf
 │   └── images/                          # documentation screenshots
+├── recommandation/
+│   ├── prompts/                         # recommendation specifications (ignored by git)
+│   ├── scripts/
+│   │   └── 8.RecommendationSystem.py    # Top-20 recommendation evaluation
+│   └── results/                         # generated outputs (ignored by git)
 ├── prompts/                             # task specifications (ignored by git)
 ├── results/                             # generated outputs (ignored by git)
 ├── README.md
@@ -119,12 +124,25 @@ python scripts/7.EvaluateM5.py \
   --cleaning-dir "$FILMFINDER_CLEANING_DIR" \
   --model-output-dir "$FILMFINDER_MODEL_OUTPUT_DIR" \
   --output-dir "$FILMFINDER_MODEL_OUTPUT_DIR/evaluate_m5"
+
+python recommandation/scripts/8.RecommendationSystem.py \
+  --cleaning-dir "$FILMFINDER_CLEANING_DIR" \
+  --model-output-dir "$FILMFINDER_MODEL_OUTPUT_DIR" \
+  --output-dir recommandation/results/recommendation_system
 ```
 
 `7.EvaluateM5.py` trains the contextual FM `M5` once, measures warm-start
 accuracy by user activity, calibrates the cold-start ridge on held-out known
 users, and evaluates progressively revealed profiles with several seeds.
 Use `--fast` for a quick smoke test and `--load-model` to reuse a checkpoint.
+
+`8.RecommendationSystem.py` evaluates four Top-20 strategies (popularity,
+M5 direct, KNN + M5, KNN + popularity) on leakage-free warm and cold cohort
+splits, tunes recommendation hyperparameters on validation cohorts, and saves
+tables, figures and example recommendations. It reuses `FMEngine`, the split
+and feature builders from `scripts/6.IncrementalVsRetraining.py`, and the
+cold-profile ridge helpers from `scripts/7.EvaluateM5.py`. Use `--fast` for a
+smoke test and `--help` for all options.
 
 ## Outputs
 

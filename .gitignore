@@ -59,11 +59,13 @@ movies_final.csv
 # Generated experiment outputs
 /outputs/
 /results_intermediate/
+/results/*/
 /results/context_fm/
 /results/debug_training/
 /results/exploring_bias/
 /results/incremental_vs_retraining/
 /incremental_vs_retraining/
+/recommandation/results/
 
 # Local notes and prompt specifications
 notes.md
