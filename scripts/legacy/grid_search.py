@@ -10,9 +10,9 @@ The sparse matrix is never converted to a dense representation.
 
 Usage
 -----
-    python grid_search.py --n-jobs 1
-    python grid_search.py --n-jobs 2 --no-resume
-    python grid_search.py --analysis-only
+    python scripts/legacy/grid_search.py --n-jobs 1
+    python scripts/legacy/grid_search.py --n-jobs 2 --no-resume
+    python scripts/legacy/grid_search.py --analysis-only
 
 Dependencies
 ------------

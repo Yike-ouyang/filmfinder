@@ -1,19 +1,85 @@
-venv
-__marimo__
-movies_final.csv 
-.ipynb_checkpoints/
-movie_ids_final.npy
-ratings_heatmap_8000.png
-ratings_matrix_10.csv
-ratings_sparse_final.npz
-user_ids_final.npy
+# Byte-compiled / cached files
 __pycache__/
-notes.md
-prompts
-results_intermediate/
-outputs/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments and local configuration
+venv/
+.venv/
+env/
+.env
+.env.*
+/.gitconfig
+
+# Notebook and tool caches
+.ipynb_checkpoints/
+__marimo__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyright/
+.hypothesis/
+build/
+dist/
+*.egg-info/
+
+# Raw data (never commit)
 data/
+datasets/
+raw/
+/Data/
+*.npy
+*.npz
+*.parquet
+*.feather
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.joblib
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.gz
+
+# Known raw-data filenames left by the preprocessing notebooks
+ratings_matrix.npz
+ratings_sparse_final.npz
+ratings_matrix_10.csv
+ratings_heatmap_8000.png
 movie_context.json
 movie_ids.npy
-ratings_matrix.npz
+movie_ids_final.npy
 user_ids.npy
+user_ids_final.npy
+movies_final.csv
+
+# Generated experiment outputs
+/outputs/
+/results_intermediate/
+/results/context_fm/
+/results/debug_training/
+/results/exploring_bias/
+/results/incremental_vs_retraining/
+/incremental_vs_retraining/
+
+# Local notes and prompt specifications
+notes.md
+/docs/notes.md
+prompts/
+/docs/prompts/
+
+# Logs
+*.log
+
+# IDE / OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+docs/images
