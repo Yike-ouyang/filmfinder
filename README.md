@@ -25,7 +25,8 @@ Film recommendation system built from a Letterboxd profile.
 ├── recommandation/
 │   ├── prompts/                         # recommendation specifications (ignored by git)
 │   ├── scripts/
-│   │   └── 8.RecommendationSystem.py    # Top-20 recommendation evaluation
+│   │   ├── 8.RecommendationSystem.py    # Top-20 recommendation evaluation
+│   │   └── 9.KNNM5Optimization.py       # cold-start KNN + M5 optimization
 │   └── results/                         # generated outputs (ignored by git)
 ├── prompts/                             # task specifications (ignored by git)
 ├── results/                             # generated outputs (ignored by git)
@@ -129,6 +130,10 @@ python recommandation/scripts/8.RecommendationSystem.py \
   --cleaning-dir "$FILMFINDER_CLEANING_DIR" \
   --model-output-dir "$FILMFINDER_MODEL_OUTPUT_DIR" \
   --output-dir recommandation/results/recommendation_system
+
+python recommandation/scripts/9.KNNM5Optimization.py \
+  --baseline-dir recommandation/results/recommendation_system \
+  --output-dir recommandation/results/knn_m5_optimization
 ```
 
 `7.EvaluateM5.py` trains the contextual FM `M5` once, measures warm-start
@@ -143,6 +148,14 @@ tables, figures and example recommendations. It reuses `FMEngine`, the split
 and feature builders from `scripts/6.IncrementalVsRetraining.py`, and the
 cold-profile ridge helpers from `scripts/7.EvaluateM5.py`. Use `--fast` for a
 smoke test and `--help` for all options.
+
+`9.KNNM5Optimization.py` focuses on cold-start KNN + M5. It loads the M5
+checkpoint and splits produced by `8.RecommendationSystem.py` without
+retraining M5, optimizes KNN candidate generation on a fixed cold cohort,
+and evaluates Recall@K and Known NDCG@K for K in
+`{5,10,20,30,50,100,200,500}`. It also compares per-profile configurations
+with a single global configuration and reports paired bootstrap confidence
+intervals.
 
 ## Outputs
 
