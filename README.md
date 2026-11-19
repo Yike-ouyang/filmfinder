@@ -136,6 +136,28 @@ python recommandation/scripts/9.KNNM5Optimization.py \
   --output-dir recommandation/results/knn_m5_optimization
 ```
 
+Resource-controlled run on a shared server:
+
+```bash
+export OMP_NUM_THREADS=4
+export OPENBLAS_NUM_THREADS=4
+export MKL_NUM_THREADS=4
+export NUMEXPR_NUM_THREADS=4
+
+python -u recommandation/scripts/9.KNNM5Optimization.py \
+  --baseline-dir recommandation/results/recommendation_system \
+  --output-dir recommandation/results/knn_m5_optimization \
+  --max-workers 1 \
+  --user-batch-size 32 \
+  --m5-batch-size 1024 \
+  --memory-budget-gb 16 \
+  --resume
+```
+
+Use `--dry-run` to print the grid size and resource estimate without loading
+data, `--limit-users N` for a smoke run, and `--resume` to continue an
+interrupted run from `checkpoints/`. Resource logs are written to `logs/`.
+
 `7.EvaluateM5.py` trains the contextual FM `M5` once, measures warm-start
 accuracy by user activity, calibrates the cold-start ridge on held-out known
 users, and evaluates progressively revealed profiles with several seeds.
