@@ -386,7 +386,7 @@ def _(mo, np, pd, pipeline):
         if genre.strip()
     })
     genre_widget = mo.ui.dropdown(
-        options={"Tous les genres": ""} | {genre: genre for genre in _genres},
+        options={"Tous les genres": "", **{genre: genre for genre in _genres}},
         value="Tous les genres",
         label="Filtrer par genre",
     )
