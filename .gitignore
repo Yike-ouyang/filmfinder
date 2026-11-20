@@ -89,3 +89,6 @@ recommandation/recommendation_system
 recommandation/knn_m5_optimization
 filmfinder_deployment/artifacts/
 restructuration.md
+# Generated local outputs
+/recommendations.json
+/import_report.json

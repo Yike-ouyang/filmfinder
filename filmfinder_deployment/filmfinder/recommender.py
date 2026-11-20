@@ -69,6 +69,12 @@ class KNNM5Recommender:
             self.config.get("fallback_candidates", 500)
         )
         self.default_top_n = int(self.config.get("default_top_n", 20))
+        ranking = str(self.config.get("ranking", "m5")).casefold()
+        self.score_type = (
+            "m5_predicted_rating"
+            if ranking == "m5"
+            else "bayesian_popularity"
+        )
 
     def _build_topk_cache(self, top_k):
         cache = [None] * self.n_users
@@ -143,12 +149,22 @@ class KNNM5Recommender:
         candidates = self.fallback_order
         if seen.size:
             candidates = candidates[~np.isin(candidates, seen)]
+        eligible = int(candidates.size)
         limit = (
             self.fallback_candidates
             if self.pool_size is None
             else min(self.pool_size, self.fallback_candidates)
         )
-        return np.asarray(candidates[:limit], dtype=np.int64), "fallback"
+        candidates = np.asarray(candidates[:limit], dtype=np.int64)
+        return candidates, "fallback", {
+            "candidate_source": "fallback",
+            "neighbors": 0,
+            "raw_occurrences": eligible,
+            "unique_candidates": eligible,
+            "after_seen": eligible,
+            "eligible_before_pool": eligible,
+            "pool_candidates": int(candidates.size),
+        }
 
     def _candidate_pool(self, similarity, seen):
         neighbor_order = self._neighbor_order(similarity)
@@ -157,19 +173,31 @@ class KNNM5Recommender:
             for neighbor in neighbor_order
             if self.topk_cache[int(neighbor)].size > 0
         ]
+        neighbors = int(neighbor_order.size)
         if not arrays:
-            return self._fallback_candidates(seen)
+            candidates, source, stats = self._fallback_candidates(seen)
+            stats["neighbors"] = neighbors
+            return candidates, source, stats
+        raw_occurrences = int(sum(array.size for array in arrays))
         concatenated = np.concatenate(arrays)
         support = np.bincount(
             concatenated, minlength=self.n_movies
         ).astype(np.float64)
         candidates = np.flatnonzero(support > 0).astype(np.int64)
-        keep = self.catalogue_mask[candidates]
+        unique_candidates = int(candidates.size)
+        candidates = candidates[self.catalogue_mask[candidates]]
         if seen.size:
-            keep = keep & ~np.isin(candidates, seen)
-        candidates = candidates[keep]
+            candidates = candidates[~np.isin(candidates, seen)]
+        after_seen = int(candidates.size)
         if candidates.size == 0:
-            return self._fallback_candidates(seen)
+            candidates, source, stats = self._fallback_candidates(seen)
+            stats.update({
+                "neighbors": neighbors,
+                "raw_occurrences": raw_occurrences,
+                "unique_candidates": unique_candidates,
+                "after_seen": 0,
+            })
+            return candidates, source, stats
         support = support[candidates]
         order = np.lexsort(
             (
@@ -182,7 +210,16 @@ class KNNM5Recommender:
             candidates = candidates[order[:self.pool_size]]
         else:
             candidates = candidates[order]
-        return np.asarray(candidates, dtype=np.int64), "knn"
+        candidates = np.asarray(candidates, dtype=np.int64)
+        return candidates, "knn", {
+            "candidate_source": "knn",
+            "neighbors": neighbors,
+            "raw_occurrences": raw_occurrences,
+            "unique_candidates": unique_candidates,
+            "after_seen": after_seen,
+            "eligible_before_pool": after_seen,
+            "pool_candidates": int(candidates.size),
+        }
 
     @staticmethod
     def _top_k_columns(cols, scores, k):
@@ -200,14 +237,20 @@ class KNNM5Recommender:
     def _format(self, top_cols, score_map):
         rows = []
         for rank, movie_col in enumerate(top_cols, start=1):
-            info = self.store.movie_info(int(movie_col))
+            movie_col = int(movie_col)
+            info = self.store.movie_info(movie_col)
             rows.append({
+                "rank": rank,
                 "movie_id": info["movie_id"],
+                "internal_movie_id": movie_col,
                 "title": info["title"],
                 "year": info["year"],
                 "genres": info["genres"],
-                "score": float(score_map[int(movie_col)]),
-                "rank": rank,
+                "score": float(score_map[movie_col]),
+                "score_type": self.score_type,
+                "tmdb_id": info.get("tmdb_id"),
+                "poster_path": info.get("poster_path"),
+                "backdrop_path": info.get("backdrop_path"),
             })
         return rows
 
@@ -228,14 +271,19 @@ class KNNM5Recommender:
         similarity = self._similarity(
             centered, binary, exclude_user=user_row
         )
-        candidates, source = self._candidate_pool(similarity, seen)
+        candidates, source, stats = self._candidate_pool(
+            similarity, seen
+        )
         scores = self.model.score_user(user_row, candidates)
-        return self._recommend_cols(candidates, scores, top_n), source
+        return self._recommend_cols(candidates, scores, top_n), stats
 
-    def recommend_new(self, movie_cols, ratings, top_n):
+    def recommend_new(self, movie_cols, ratings, top_n, extra_seen=None):
         movie_cols = np.asarray(movie_cols, dtype=np.int64)
         ratings = np.asarray(ratings, dtype=np.float64)
-        seen = np.unique(movie_cols)
+        if extra_seen is None:
+            extra_seen = np.zeros(0, dtype=np.int64)
+        extra_seen = np.asarray(extra_seen, dtype=np.int64)
+        seen = np.unique(np.concatenate([movie_cols, extra_seen]))
         if movie_cols.size:
             centered, binary = self._target_centered(
                 movie_cols, ratings
@@ -243,7 +291,9 @@ class KNNM5Recommender:
             similarity = self._similarity(centered, binary)
         else:
             similarity = None
-        candidates, source = self._candidate_pool(similarity, seen)
+        candidates, source, stats = self._candidate_pool(similarity, seen)
+        stats["ratings_count"] = int(movie_cols.size)
+        stats["watched_count"] = int(extra_seen.size)
         if movie_cols.size:
             base, latent = self.model.item_components(movie_cols)
             from .cold_start import fit_cold_profile
@@ -258,4 +308,4 @@ class KNNM5Recommender:
         else:
             theta = np.zeros(self.model.n_factors + 1, dtype=np.float64)
         scores = self.model.score_cold(theta, candidates)
-        return self._recommend_cols(candidates, scores, top_n), source
+        return self._recommend_cols(candidates, scores, top_n), stats

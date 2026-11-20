@@ -50,12 +50,35 @@ class FilmFinderEngine:
                 f"Unknown user_id {user_id!r}. Use recommend_new_user "
                 "for a user outside the training matrix."
             ) from error
-        recommendations, source = self.recommender.recommend_existing(
+        recommendations, stats = self.recommender.recommend_existing(
             user_row, top_n
         )
         return recommendations
 
-    def recommend_new_user(self, ratings, top_n=None):
+    def _watched_cols(self, watched_movie_ids):
+        if watched_movie_ids is None:
+            return np.zeros(0, dtype=np.int64)
+        watched = []
+        seen_keys = set()
+        for movie_id in watched_movie_ids:
+            key = _key(movie_id)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            try:
+                watched.append(self.store.movie_col(movie_id))
+            except KeyError as error:
+                raise ValueError(
+                    f"Unknown watched movie_id: {movie_id!r}"
+                ) from error
+        return np.asarray(watched, dtype=np.int64)
+
+    def recommend_new_user_with_stats(
+        self,
+        ratings,
+        top_n=None,
+        watched_movie_ids=None,
+    ):
         top_n = self._validate_top_n(
             self.default_top_n if top_n is None else top_n
         )
@@ -70,7 +93,12 @@ class FilmFinderEngine:
             if _key(movie_id) in seen_keys:
                 raise ValueError(f"Duplicate movie_id: {movie_id!r}")
             seen_keys.add(_key(movie_id))
-            movie_col = self.store.movie_col(movie_id)
+            try:
+                movie_col = self.store.movie_col(movie_id)
+            except KeyError as error:
+                raise ValueError(
+                    f"Unknown movie_id: {movie_id!r}"
+                ) from error
             value = float(rating)
             if not math.isfinite(value):
                 raise ValueError(
@@ -78,9 +106,26 @@ class FilmFinderEngine:
                 )
             movie_cols.append(movie_col)
             values.append(value)
-        recommendations, source = self.recommender.recommend_new(
+        watched_cols = self._watched_cols(watched_movie_ids)
+        recommendations, stats = self.recommender.recommend_new(
             np.asarray(movie_cols, dtype=np.int64),
             np.asarray(values, dtype=np.float64),
             top_n,
+            extra_seen=watched_cols,
+        )
+        stats["requested_top_n"] = int(top_n)
+        stats["returned"] = int(len(recommendations))
+        return recommendations, stats
+
+    def recommend_new_user(
+        self,
+        ratings,
+        top_n=None,
+        watched_movie_ids=None,
+    ):
+        recommendations, stats = self.recommend_new_user_with_stats(
+            ratings,
+            top_n=top_n,
+            watched_movie_ids=watched_movie_ids,
         )
         return recommendations

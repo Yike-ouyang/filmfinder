@@ -53,17 +53,57 @@ uses the popularity fallback.
 ```python
 [
     {
-        "movie_id": 123,
+        "rank": 1,
+        "movie_id": "example-movie-1999",
+        "internal_movie_id": 123,
         "title": "Example Movie",
         "year": 1999,
         "genres": ["Drama"],
         "score": 9.2,
-        "rank": 1,
+        "score_type": "m5_predicted_rating",
+        "tmdb_id": None,
+        "poster_path": None,
+        "backdrop_path": None,
     }
 ]
 ```
 
 The default candidate pool is 100. `top_n` may not exceed this pool size.
+Poster, backdrop and explicit TMDB fields are returned as `null` when they
+are absent from the current artifacts; no metadata is invented.
+
+## Letterboxd import and CLI
+
+`letterboxd_import.py` converts a Letterboxd ZIP export into a cold-start
+profile. Ratings are normalized from the Letterboxd 0.5–5 scale to the M5
+1–10 scale. `watched.csv` is used only to exclude already-watched movies and
+never creates artificial ratings.
+
+```bash
+python filmfinder_deployment/generate_recommendations.py \
+  --letterboxd-zip filmfinder_deployment/letterboxd-eslpej-2026-11-20-10-33-utc.zip \
+  --artifacts filmfinder_deployment/artifacts \
+  --top-n 100 \
+  --output recommendations.json \
+  --report import_report.json
+```
+
+The module can also be invoked from the repository root as:
+
+```bash
+python -m filmfinder_deployment.generate_recommendations ...
+```
+
+The CLI writes the ranked recommendations and a detailed import report. It
+reports unmatched/ambiguous Letterboxd movies and watched movies that cannot
+be matched. With the current global configuration (`pool=100`), up to 100
+unseen pool candidates are ranked; if fewer candidates remain after filtering,
+the available recommendations are returned and the limitation is reported.
+
+`import_report.json` records rating normalization, matched/unmatched/ambiguous
+ratings, watched-only matches, duplicates, fuzzy matches, and unmatched watched
+movies. Ratings from Letterboxd are scaled by 2 (0.5–5 to 1–10). A watched movie
+that cannot be matched to the catalogue is reported but cannot be excluded.
 
 ## Recommendation configuration
 
@@ -100,7 +140,7 @@ The exact configuration and its source path are in
 | `m5_config.json` | final training configuration, feature configuration, version |
 | `recommendation_config.json` | KNN + M5 algorithm configuration |
 | `feature_mappings.json` | feature order, families, user feature indices, year stats |
-| `movie_metadata.json` | internal ID, canonical movie ID, title, year, genres, available source IDs |
+| `movie_metadata.json` | internal ID, canonical movie ID, title, year, genres, available source IDs (no posters/backdrops currently) |
 | `movie_features.npz` | sparse precomputed non-user M5 features for every movie |
 | `user_ids.npy` | user row ordering |
 | `movie_ids.npy` | movie column ordering |
@@ -136,6 +176,14 @@ python verify_export.py --artifacts artifacts
 
 The verifier checks loading, existing-user recommendations, new-user
 recommendations, rated-movie exclusion and score ordering.
+
+## Tests
+
+```bash
+python -m unittest filmfinder_deployment.test_letterboxd_pipeline -v
+```
+
+The tests use the provided Letterboxd ZIP and the current artifacts.
 
 ## Export
 

@@ -92,9 +92,22 @@ class ArtifactStore:
             genres = list(row["genres"])
         else:
             genres = []
+        source_ids = row.get("source_ids") or {}
+        if not isinstance(source_ids, dict):
+            source_ids = {}
         return {
             "movie_id": _native(self.movie_ids[movie_col]),
-            "title": row.get("title", str(_native(self.movie_ids[movie_col]))),
+            "internal_movie_id": movie_col,
+            "title": row.get(
+                "title", str(_native(self.movie_ids[movie_col]))
+            ),
             "year": row.get("year"),
             "genres": genres,
+            "tmdb_id": row.get("tmdb_id", source_ids.get("tmdb_id")),
+            "poster_path": row.get(
+                "poster_path", row.get("poster")
+            ),
+            "backdrop_path": row.get(
+                "backdrop_path", row.get("backdrop")
+            ),
         }
