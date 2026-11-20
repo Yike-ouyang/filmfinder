@@ -30,6 +30,7 @@ Film recommendation system built from a Letterboxd profile.
 │   │   ├── 9.RecommendationExplorer.py  # interactive recommendation explorer
 │   │   └── recommendation_explorer_core.py
 │   └── results/                         # generated outputs (ignored by git)
+├── filmfinder_deployment/               # standalone inference package
 ├── prompts/                             # task specifications (ignored by git)
 ├── results/                             # generated outputs (ignored by git)
 ├── README.md
@@ -161,6 +162,19 @@ Artifact-backed pipeline tests (on the server where the data is available):
 FILMFINDER_EXPLORER_TESTS=1 python -m unittest \
   recommandation/scripts/test_recommendation_explorer_core.py -v
 ```
+
+Deployment export:
+
+```bash
+python recommandation/scripts/export_filmfinder_deployment.py \
+  --cleaning-dir "$FILMFINDER_CLEANING_DIR" \
+  --baseline-dir recommandation/recommendation_system \
+  --knn-dir recommandation/knn_m5_optimization \
+  --output-dir filmfinder_deployment
+```
+
+The exporter retrains M5 on all ratings, writes `filmfinder_deployment/artifacts`
+and verifies the exported engine. See `filmfinder_deployment/README.md`.
 
 `7.EvaluateM5.py` trains the contextual FM `M5` once, measures warm-start
 accuracy by user activity, calibrates the cold-start ridge on held-out known
