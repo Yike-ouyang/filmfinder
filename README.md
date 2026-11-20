@@ -26,7 +26,9 @@ Film recommendation system built from a Letterboxd profile.
 │   ├── prompts/                         # recommendation specifications (ignored by git)
 │   ├── scripts/
 │   │   ├── 8.RecommendationSystem.py    # Top-20 recommendation evaluation
-│   │   └── 9.KNNM5Optimization.py       # cold-start KNN + M5 optimization
+│   │   ├── 9.KNNM5Optimization.py       # cold-start KNN + M5 optimization
+│   │   ├── 9.RecommendationExplorer.py  # interactive recommendation explorer
+│   │   └── recommendation_explorer_core.py
 │   └── results/                         # generated outputs (ignored by git)
 ├── prompts/                             # task specifications (ignored by git)
 ├── results/                             # generated outputs (ignored by git)
@@ -134,6 +136,30 @@ python recommandation/scripts/8.RecommendationSystem.py \
 python recommandation/scripts/9.KNNM5Optimization.py \
   --baseline-dir recommandation/results/recommendation_system \
   --output-dir recommandation/results/knn_m5_optimization
+```
+
+Interactive recommendation explorer:
+
+```bash
+export FILMFINDER_CLEANING_DIR=/Data/yike-ouyang/ml_training
+export FILMFINDER_RECOMMENDATION_DIR=recommandation/recommendation_system
+export FILMFINDER_KNN_M5_DIR=recommandation/knn_m5_optimization
+
+marimo edit recommandation/scripts/9.RecommendationExplorer.py
+```
+
+The explorer reuses the artefacts produced by scripts 8 and 9, never
+retrains M5, and uses the global cold KNN + M5 configuration plus the best
+warm configuration. It shows user profiles, neighbors, candidate generation,
+filtering, candidate recall, M5 scores, Top-20 recommendations, per-user
+metrics and movie tracking. The pipeline logic lives in
+`recommandation/scripts/recommendation_explorer_core.py`.
+
+Artifact-backed pipeline tests (on the server where the data is available):
+
+```bash
+FILMFINDER_EXPLORER_TESTS=1 python -m unittest \
+  recommandation/scripts/test_recommendation_explorer_core.py -v
 ```
 
 `7.EvaluateM5.py` trains the contextual FM `M5` once, measures warm-start
