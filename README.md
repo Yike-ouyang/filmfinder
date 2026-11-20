@@ -1,49 +1,42 @@
 # FilmFinder
 
-Film recommendation system built from a Letterboxd profile.
+Film recommendation system based on a contextual Factorization Machine (M5)
+and a KNN candidate generator. The repository is organized as a monorepo for
+research, the production recommendation engine, and the future web application.
 
 ## Repository layout
 
 ```text
 .
-├── scripts/
-│   ├── data_cleaning.py                 # CSV datasets -> npz / npy / json exports
-│   ├── 1.Preprocessing.py               # simplified alternative preprocessing
-│   ├── 2.Processing.py                  # FM training and diagnostics
-│   ├── 3.ExploringBias.py               # bias analysis
-│   ├── 4.DebugTraining.py               # regularization experiments
-│   ├── 5.ContextFM.py                   # user-film FM vs contextual FM
-│   ├── 6.IncrementalVsRetraining.py     # local adaptation vs global retraining
-│   ├── 7.EvaluateM5.py                  # warm-start / cold-start evaluation of M5
-│   └── legacy/
-│       ├── 2.ModelPredicting.py         # old Surprise SVD notebook
-│       └── grid_search.py               # old SVD grid search
+├── apps/
+│   ├── backend/                 # minimal FastAPI scaffold
+│   └── frontend/                # future Next.js application (placeholder)
+├── packages/
+│   └── recommendation-engine/   # installable inference package
+├── research/
+│   ├── preprocessing/           # data cleaning pipelines
+│   ├── modeling/                # FM / M5 training and evaluation
+│   ├── recommendation/          # recommendation experiments and export
+│   ├── explorer/                # marimo recommendation explorer
+│   ├── legacy/                  # early SVD experiments
+│   └── results/                 # generated experimental outputs (ignored)
+├── infrastructure/              # future Docker/Caddy/PostgreSQL setup
 ├── docs/
-│   ├── notes.md                         # local notes (ignored by git)
-│   ├── filmfinder_flowchart.pdf
-│   └── images/                          # documentation screenshots
-├── recommandation/
-│   ├── prompts/                         # recommendation specifications (ignored by git)
-│   ├── scripts/
-│   │   ├── 8.RecommendationSystem.py    # Top-20 recommendation evaluation
-│   │   ├── 9.KNNM5Optimization.py       # cold-start KNN + M5 optimization
-│   │   ├── 9.RecommendationExplorer.py  # interactive recommendation explorer
-│   │   └── recommendation_explorer_core.py
-│   └── results/                         # generated outputs (ignored by git)
-├── filmfinder_deployment/               # standalone inference package
-├── prompts/                             # task specifications (ignored by git)
-├── results/                             # generated outputs (ignored by git)
+│   ├── architecture.md
+│   ├── development.md
+│   ├── deployment.md
+│   ├── repository-migration.md
+│   └── frontend.md
+├── prompts/                     # task specifications
+├── .env.example
 ├── README.md
-└── requirements.txt
+└── pyproject.toml
 ```
 
-## Data
+## Data and artifacts
 
-Raw datasets and generated data files are **never committed**.
-`.gitignore` excludes `data/`, sparse matrices, NumPy/Parquet files and the
-generated `results/` outputs.
-
-The FM pipeline consumes a cleaning directory containing:
+The training pipeline reads the cleaned exports defined by
+`FILMFINDER_CLEANING_DIR`:
 
 ```text
 ratings_matrix.npz
@@ -52,163 +45,169 @@ movie_ids.npy
 movie_context.json
 ```
 
-`data_cleaning.py` builds this contract from the raw Letterboxd CSV exports.
-`1.Preprocessing.py` is a lighter alternative that exports parquet mappings
-instead.
-
-Default location is the current directory. The notebooks also read:
-
-```bash
-export FILMFINDER_CLEANING_DIR=/path/to/cleaning
-export FILMFINDER_MODEL_OUTPUT_DIR=/path/to/modeling
-```
-
-## Input datasets
-
-- [Letterboxd movies](https://www.kaggle.com/datasets/gsimonx37/letterboxd):
-  `movies.csv`, `studios.csv`, `genres.csv`.
-- [Letterboxd ratings](https://www.kaggle.com/datasets/samlearner/letterboxd-movie-ratings-data):
-  `movie_data.csv`, `ratings_export.csv`.
-
-After cleaning and merging: roughly 7.2k users, 25k films and 5M triplets.
-The sparse user-film matrix is about 97% empty.
-
-## Model
-
-Factorization Machines:
+Experimental recommendation artifacts are written under:
 
 ```text
-y(x) = w0 + sum_i w_i x_i + sum_{i<j} <v_i, v_j> x_i x_j
+research/results/recommendation_system/
+research/results/knn_m5_optimization/
 ```
 
-- `w0` is the global baseline score.
-- `w_i` is the weight of feature `i`.
-- `v_i` is the latent vector of feature `i`, of size `k`.
-
-An observation is the one-hot encoding of `(user, film, context)`, and the
-target is the rating:
+The production artifacts are under:
 
 ```text
-rating = w0 + w_user + w_film + <v_user, v_film>
+packages/recommendation-engine/artifacts/
 ```
 
-The training loss is:
-
-```text
-L = 1/2 * sum_{(x,y)} (y_hat(x) - y)^2
-    + lambda_w/2 * ||w||^2
-    + lambda_V/2 * ||V||_F^2
-```
-
-## Running
-
-Install dependencies:
+They contain the final M5 weights, the recommendation configuration, the
+movie feature matrix, the rating matrix, and the ID/metadata mappings. Large
+artifacts are ignored by Git. To mount them elsewhere:
 
 ```bash
-pip install -r requirements.txt
+export FILMFINDER_ARTIFACTS_DIR=/path/to/artifacts
 ```
 
-Marimo notebooks:
+## Research workflow
+
+Run marimo notebooks with:
 
 ```bash
-marimo edit scripts/2.Processing.py
-marimo edit scripts/3.ExploringBias.py
-marimo edit scripts/4.DebugTraining.py
-marimo edit scripts/5.ContextFM.py
+marimo edit research/preprocessing/data_cleaning.py
+marimo edit research/modeling/2.Processing.py
+marimo edit research/modeling/3.ExploringBias.py
+marimo edit research/modeling/4.DebugTraining.py
+marimo edit research/modeling/5.ContextFM.py
 ```
 
 Standalone experiments:
 
 ```bash
-python scripts/6.IncrementalVsRetraining.py \
+python research/modeling/6.IncrementalVsRetraining.py \
   --cleaning-dir "$FILMFINDER_CLEANING_DIR" \
   --model-output-dir "$FILMFINDER_MODEL_OUTPUT_DIR"
 
-python scripts/7.EvaluateM5.py \
+python research/modeling/7.EvaluateM5.py \
   --cleaning-dir "$FILMFINDER_CLEANING_DIR" \
   --model-output-dir "$FILMFINDER_MODEL_OUTPUT_DIR" \
   --output-dir "$FILMFINDER_MODEL_OUTPUT_DIR/evaluate_m5"
 
-python recommandation/scripts/8.RecommendationSystem.py \
+python research/recommendation/8.RecommendationSystem.py \
   --cleaning-dir "$FILMFINDER_CLEANING_DIR" \
   --model-output-dir "$FILMFINDER_MODEL_OUTPUT_DIR" \
-  --output-dir recommandation/results/recommendation_system
+  --output-dir research/results/recommendation_system
 
-python recommandation/scripts/9.KNNM5Optimization.py \
-  --baseline-dir recommandation/results/recommendation_system \
-  --output-dir recommandation/results/knn_m5_optimization
+python research/recommendation/9.KNNM5Optimization.py \
+  --baseline-dir research/results/recommendation_system \
+  --output-dir research/results/knn_m5_optimization
 ```
 
-Interactive recommendation explorer:
+The recommendation explorer is available at:
 
 ```bash
-export FILMFINDER_CLEANING_DIR=/Data/yike-ouyang/ml_training
-export FILMFINDER_RECOMMENDATION_DIR=recommandation/recommendation_system
-export FILMFINDER_KNN_M5_DIR=recommandation/knn_m5_optimization
-
-marimo edit recommandation/scripts/9.RecommendationExplorer.py
+marimo edit research/explorer/9.RecommendationExplorer.py
 ```
 
-The explorer reuses the artefacts produced by scripts 8 and 9, never
-retrains M5, and uses the global cold KNN + M5 configuration plus the best
-warm configuration. It shows user profiles, neighbors, candidate generation,
-filtering, candidate recall, M5 scores, Top-20 recommendations, per-user
-metrics and movie tracking. The pipeline logic lives in
-`recommandation/scripts/recommendation_explorer_core.py`.
+## Recommendation engine
 
-Artifact-backed pipeline tests (on the server where the data is available):
+Install the production inference package:
 
 ```bash
-FILMFINDER_EXPLORER_TESTS=1 python -m unittest \
-  recommandation/scripts/test_recommendation_explorer_core.py -v
+pip install -e packages/recommendation-engine
 ```
 
-Deployment export:
+```python
+from filmfinder import FilmFinderEngine
+
+engine = FilmFinderEngine.load("packages/recommendation-engine/artifacts")
+recommendations = engine.recommend(user_id="USER_ID", top_n=20)
+recommendations = engine.recommend_new_user(
+    ratings={"MOVIE_ID": 8.0},
+    watched_movie_ids={"OTHER_MOVIE_ID"},
+    top_n=100,
+)
+```
+
+Letterboxd CLI:
 
 ```bash
-python recommandation/scripts/export_filmfinder_deployment.py \
+python packages/recommendation-engine/scripts/generate_recommendations.py \
+  --letterboxd-zip packages/recommendation-engine/tests/fixtures/letterboxd-eslpej-2026-11-20-10-33-utc.zip \
+  --artifacts packages/recommendation-engine/artifacts \
+  --top-n 100 \
+  --output recommendations.json \
+  --report import_report.json
+```
+
+The engine never retrains M5 globally. New users use the existing ridge
+cold-start adaptation; watched and rated movies are excluded before ranking.
+
+## Export the final artifacts
+
+```bash
+python research/recommendation/export_filmfinder_deployment.py \
   --cleaning-dir "$FILMFINDER_CLEANING_DIR" \
-  --baseline-dir recommandation/recommendation_system \
-  --knn-dir recommandation/knn_m5_optimization \
-  --output-dir filmfinder_deployment
+  --baseline-dir research/results/recommendation_system \
+  --knn-dir research/results/knn_m5_optimization \
+  --output-dir packages/recommendation-engine
 ```
 
-The exporter retrains M5 on all ratings, writes `filmfinder_deployment/artifacts`
-and verifies the exported engine. See `filmfinder_deployment/README.md`.
+The exporter retrains M5 on all ratings, writes artifacts, verifies prediction
+and Top-20 equivalence, and writes `EXPORT_REPORT.md`.
 
-`7.EvaluateM5.py` trains the contextual FM `M5` once, measures warm-start
-accuracy by user activity, calibrates the cold-start ridge on held-out known
-users, and evaluates progressively revealed profiles with several seeds.
-Use `--fast` for a quick smoke test and `--load-model` to reuse a checkpoint.
+## Backend
 
-`8.RecommendationSystem.py` evaluates four Top-20 strategies (popularity,
-M5 direct, KNN + M5, KNN + popularity) on leakage-free warm and cold cohort
-splits, tunes recommendation hyperparameters on validation cohorts, and saves
-tables, figures and example recommendations. It reuses `FMEngine`, the split
-and feature builders from `scripts/6.IncrementalVsRetraining.py`, and the
-cold-profile ridge helpers from `scripts/7.EvaluateM5.py`. Use `--fast` for a
-smoke test and `--help` for all options.
+```bash
+pip install -e packages/recommendation-engine
+pip install -e apps/backend
+uvicorn app.main:app --reload
+```
 
-`9.KNNM5Optimization.py` focuses on cold-start KNN + M5. It loads the M5
-checkpoint and splits produced by `8.RecommendationSystem.py` without
-retraining M5, optimizes KNN candidate generation on a fixed cold cohort,
-and evaluates Recall@K and Known NDCG@K for K in
-`{5,10,20,30,50,100,200,500}`. It also compares per-profile configurations
-with a single global configuration and reports paired bootstrap confidence
-intervals.
+`GET /health` returns `{"status": "ok"}`. The recommendation engine is loaded
+once at startup; `GET /api/v1/ready` reports readiness.
 
-## Outputs
+Letterboxd upload:
 
-Generated artifacts are written outside the versioned tree or under
-`results/`, which is ignored:
+```bash
+curl -X POST \
+  "http://localhost:8000/api/v1/recommendations/from-letterboxd?limit=100" \
+  -F "file=@packages/recommendation-engine/tests/fixtures/letterboxd-eslpej-2026-11-20-10-33-utc.zip"
+```
 
-- training histories and learning curves;
-- warm-start and cold-start metrics;
-- calibration grids;
-- comparison tables and figures.
+Offline TMDB metadata enrichment uses `movie_data.csv` and writes
+`packages/recommendation-engine/artifacts/tmdb_metadata.json`; see the
+backend README.
 
-## Legacy
+## Frontend
 
-The `scripts/legacy/` directory keeps the early Surprise SVD baseline
-(`2.ModelPredicting.py`, `grid_search.py`). The current pipeline uses the
-custom FM implementation.
+`apps/frontend/` is a placeholder for the future Next.js/React/TypeScript
+application. Planned routes and visual direction are documented in
+`apps/frontend/README.md` and `docs/frontend.md`.
+
+## Infrastructure
+
+`infrastructure/README.md` documents the future Docker Compose, Caddy,
+FastAPI, Next.js, and PostgreSQL deployment. No production deployment is
+configured yet.
+
+## Tests
+
+```bash
+python -m unittest discover -s packages/recommendation-engine/tests -p "test_*.py" -v
+
+FILMFINDER_EXPLORER_TESTS=1 python -m unittest \
+  research/explorer/test_recommendation_explorer_core.py -v
+
+python -m compileall research packages apps
+```
+
+Artifact-backed tests require the generated artifacts and, for the Letterboxd
+test, the ignored fixture ZIP.
+
+## Migration and architecture
+
+- `docs/architecture.md`: component responsibilities and data flow.
+- `docs/repository-migration.md`: old paths, new paths, import changes, tests.
+- `docs/development.md`: local setup and commands.
+- `docs/deployment.md`: planned deployment architecture.
+
+Generated outputs under `research/results/` and
+`packages/recommendation-engine/artifacts/` are not committed.

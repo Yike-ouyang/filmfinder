@@ -1,0 +1,16 @@
+[project]
+name = "filmfinder-monorepo"
+version = "0.1.0"
+description = "FilmFinder monorepo"
+requires-python = ">=3.9"
+dependencies = []
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.pytest.ini_options]
+testpaths = [
+  "packages/recommendation-engine/tests",
+  "apps/backend/tests",
+]
