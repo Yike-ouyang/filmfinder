@@ -69,8 +69,26 @@ python packages/recommendation-engine/scripts/generate_recommendations.py \
 ## Backend
 
 ```bash
+pip install -e packages/recommendation-engine
 pip install -e apps/backend
+cp apps/backend/.env.example apps/backend/.env
+cd apps/backend
 uvicorn app.main:app --reload
+```
+
+```bash
+curl -X POST \
+  "http://localhost:8000/api/v1/recommendations/from-letterboxd?limit=100" \
+  -F "file=@packages/recommendation-engine/tests/fixtures/letterboxd-eslpej-2026-11-20-10-33-utc.zip"
+```
+
+Offline TMDB enrichment:
+
+```bash
+python apps/backend/scripts/enrich_tmdb_metadata.py \
+  --catalogue-csv movie_data.csv \
+  --artifacts packages/recommendation-engine/artifacts \
+  --resume
 ```
 
 ## Tests

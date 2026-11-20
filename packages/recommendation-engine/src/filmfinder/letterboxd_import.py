@@ -186,6 +186,10 @@ class _MovieMatcher:
         return None
 
 
+def build_movie_matcher(movies):
+    return _MovieMatcher(movies)
+
+
 def _match_record(matcher, row):
     return matcher.match(
         row.get("Name"),
@@ -232,15 +236,19 @@ def load_letterboxd_profile(
     zip_source,
     metadata_path=None,
     artifacts_dir=None,
+    movie_metadata=None,
+    matcher=None,
 ):
-    if metadata_path is None:
-        if artifacts_dir is None:
-            artifacts_dir = (
-                Path(__file__).resolve().parents[2] / "artifacts"
-            )
-        metadata_path = Path(artifacts_dir) / "movie_metadata.json"
-    movies = _load_movie_metadata(metadata_path)
-    matcher = _MovieMatcher(movies)
+    if matcher is None:
+        if movie_metadata is None:
+            if metadata_path is None:
+                if artifacts_dir is None:
+                    artifacts_dir = (
+                        Path(__file__).resolve().parents[2] / "artifacts"
+                    )
+                metadata_path = Path(artifacts_dir) / "movie_metadata.json"
+            movie_metadata = _load_movie_metadata(metadata_path)
+        matcher = _MovieMatcher(movie_metadata)
     target_max = 10.0
     target_min = 1.0
     source_max = LETTERBOXD_MAX_RATING

@@ -162,7 +162,19 @@ uvicorn app.main:app --reload
 ```
 
 `GET /health` returns `{"status": "ok"}`. The recommendation engine is loaded
-lazily and is not required by the health endpoint.
+once at startup; `GET /api/v1/ready` reports readiness.
+
+Letterboxd upload:
+
+```bash
+curl -X POST \
+  "http://localhost:8000/api/v1/recommendations/from-letterboxd?limit=100" \
+  -F "file=@packages/recommendation-engine/tests/fixtures/letterboxd-eslpej-2026-11-20-10-33-utc.zip"
+```
+
+Offline TMDB metadata enrichment uses `movie_data.csv` and writes
+`packages/recommendation-engine/artifacts/tmdb_metadata.json`; see the
+backend README.
 
 ## Frontend
 

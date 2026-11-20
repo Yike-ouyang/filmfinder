@@ -89,3 +89,6 @@ restructuration.md
 # Generated local outputs
 /recommendations.json
 /import_report.json
+
+# Local raw data
+/movie_data.csv

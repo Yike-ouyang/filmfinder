@@ -170,9 +170,15 @@ profile -> centered similarity -> 50 neighbors -> 20 movies/neighbor
 
 ## 7. Backend and frontend
 
-`apps/backend/` is a minimal FastAPI scaffold. It exposes `GET /health`, loads
-the recommendation engine lazily, and does not connect to PostgreSQL at
-startup.
+`apps/backend/` is the FastAPI POC. It loads the recommendation engine once
+during lifespan startup, exposes `GET /health`, `GET /api/v1/ready`, and
+`POST /api/v1/recommendations/from-letterboxd?limit=100`. Letterboxd ZIPs are
+validated in memory before reuse of the existing parser. The backend is
+stateless: no accounts, database, sessions, or swipe persistence.
+
+TMDB image metadata is loaded from a local JSON produced by
+`apps/backend/scripts/enrich_tmdb_metadata.py`. Recommendation requests never
+call TMDB.
 
 `apps/frontend/` is a placeholder for the future Next.js application described
 in `docs/frontend.md`.
