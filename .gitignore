@@ -10,6 +10,7 @@ venv/
 env/
 .env
 .env.*
+!.env.example
 /.gitconfig
 
 # Notebook and tool caches
@@ -59,13 +60,8 @@ movies_final.csv
 # Generated experiment outputs
 /outputs/
 /results_intermediate/
-/results/*/
-/results/context_fm/
-/results/debug_training/
-/results/exploring_bias/
-/results/incremental_vs_retraining/
+/research/results/*/
 /incremental_vs_retraining/
-/recommandation/results/
 
 # Local notes and prompt specifications
 notes.md
@@ -85,9 +81,10 @@ Thumbs.db
 *.swo
 
 docs/images
-recommandation/recommendation_system
-recommandation/knn_m5_optimization
-filmfinder_deployment/artifacts/
+research/results/recommendation_system
+research/results/knn_m5_optimization
+packages/recommendation-engine/artifacts/
+packages/recommendation-engine/examples/
 restructuration.md
 # Generated local outputs
 /recommendations.json
