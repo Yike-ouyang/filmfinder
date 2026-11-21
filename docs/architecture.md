@@ -170,11 +170,32 @@ profile -> centered similarity -> 50 neighbors -> 20 movies/neighbor
 
 ## 7. Backend and frontend
 
-`apps/backend/` is the FastAPI POC. It loads the recommendation engine once
-during lifespan startup, exposes `GET /health`, `GET /api/v1/ready`, and
-`POST /api/v1/recommendations/from-letterboxd?limit=100`. Letterboxd ZIPs are
-validated in memory before reuse of the existing parser. The backend is
-stateless: no accounts, database, sessions, or swipe persistence.
+`apps/backend/` is the FastAPI application. It loads the recommendation engine
+once during lifespan startup, exposes `GET /health`, `GET /api/v1/ready`,
+`POST /api/v1/recommendations/from-letterboxd?limit=100`, and the
+`/api/v1/auth/*` endpoints. Letterboxd ZIPs are validated in memory before
+reuse of the existing parser.
+
+Phase 1 adds a versioned SQLite schema managed by Alembic. Phase 2 adds
+accounts, optional email verification, server-side sessions, CSRF protection,
+and password reset. Verification is disabled by default and can be re-enabled
+with `REQUIRE_EMAIL_VERIFICATION=true`. The public recommendation endpoint
+remains usable without an account.
+
+Phase 3 persists authenticated Letterboxd imports in `user_films`, merges
+successive imports, and generates recommendations from the cumulative saved
+profile.
+
+Phase 4 persists swipe decisions in `user_swipes` with an append-only
+`user_swipe_events` history for Undo. The `My Lists` page exposes the
+`interested` and `not_interested` categories.
+
+Phase 5 adds server-side recommendation batches. Login schedules a background
+recalculation, and the engine excludes `not_interested`, `already_seen`, rated,
+and watched films. Batch history is stored in `recommendation_batches` and
+`recommendation_items`. Phase 6 removes the discovery counter and adds a
+server-backed "Get more recommendations" action at the end of a batch, with an
+explicit no-new-candidates state.
 
 TMDB image metadata is loaded from a local JSON produced by
 `apps/backend/scripts/enrich_tmdb_metadata.py`. Recommendation requests never

@@ -29,9 +29,11 @@ function abortableFetch() {
 
 beforeEach(() => {
   window.sessionStorage.clear();
+  document.cookie = "ff_csrf=test-csrf; path=/";
 });
 
 afterEach(() => {
+  document.cookie = "ff_csrf=; Max-Age=0; path=/";
   vi.unstubAllGlobals();
 });
 
@@ -48,13 +50,36 @@ describe("requestRecommendations", () => {
       "http://localhost:8000/api/v1/recommendations/from-letterboxd?limit=25",
     );
     expect(init?.method).toBe("POST");
-    expect(init?.credentials).toBe("omit");
+    expect(init?.credentials).toBe("include");
+    expect(new Headers(init?.headers).get("X-CSRF-Token")).toBe("test-csrf");
     expect(init?.body).toBeInstanceOf(FormData);
     const body = init?.body as FormData;
     expect(body.get("file")).toBeInstanceOf(File);
     expect((body.get("file") as File).name).toBe("export.zip");
     expect(result.recommendations).toHaveLength(3);
     expect(result.recommendation_info.model).toBe("M5");
+  });
+
+  it("fetches a CSRF token before uploading when the cookie is missing", async () => {
+    document.cookie = "ff_csrf=; Max-Age=0; path=/";
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      void init;
+      if (url.endsWith("/api/v1/auth/csrf")) {
+        return Promise.resolve(
+          jsonResponse({ csrf_token: "server-csrf-token" }),
+        );
+      }
+      return Promise.resolve(jsonResponse(makeResponse()));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await requestRecommendations({ file });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const uploadInit = fetchMock.mock.calls[1][1] as RequestInit;
+    expect(new Headers(uploadInit.headers).get("X-CSRF-Token")).toBe(
+      "server-csrf-token",
+    );
   });
 
   it("uses the default limit of 100", async () => {

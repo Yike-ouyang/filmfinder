@@ -30,19 +30,19 @@ afterEach(() => {
 });
 
 describe("DiscoverExperience", () => {
-  it("renders the batch in order and updates the real counter", async () => {
+  it("renders the batch in order without a counter", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     render(<DiscoverExperience initialBatch={makeBatch(2)} />);
 
     expect(screen.getByText("Film One")).toBeVisible();
-    expect(screen.getByLabelText("Recommendation 1 of 2")).toBeVisible();
+    expect(screen.queryByText(/Recommendation \d+ of \d+/)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Pass/ }));
 
     await waitFor(() => expect(screen.getByText("Film Two")).toBeVisible());
-    expect(screen.getByLabelText("Recommendation 2 of 2")).toBeVisible();
+    expect(screen.queryByText(/Recommendation \d+ of \d+/)).not.toBeInTheDocument();
     await waitFor(() =>
       expect(loadBatch().batch?.decisions).toEqual([
         { key: "1001", kind: "passed" },
@@ -61,7 +61,6 @@ describe("DiscoverExperience", () => {
     await user.click(screen.getByRole("button", { name: /Undo/ }));
 
     await waitFor(() => expect(screen.getByText("Film One")).toBeVisible());
-    expect(screen.getByLabelText("Recommendation 1 of 2")).toBeVisible();
     await waitFor(() =>
       expect(loadBatch().batch?.decisions).toHaveLength(0),
     );
@@ -102,7 +101,7 @@ describe("DiscoverExperience", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: /reached the end of your discoveries/i,
+        name: /reached the end of these discoveries/i,
       }),
     ).toBeVisible();
     expect(screen.getByText("Passed")).toBeVisible();
@@ -149,5 +148,110 @@ describe("DiscoverExperience", () => {
     render(<DiscoverExperience initialBatch={batch} />);
 
     expect(screen.getAllByText("Film One").length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("DiscoverExperience persistence", () => {
+  it("persists a decision before advancing the card", async () => {
+    const user = userEvent.setup();
+    const persistDecision = vi.fn().mockResolvedValue(undefined);
+    render(
+      <DiscoverExperience
+        initialBatch={makeBatch(2)}
+        persistDecision={persistDecision}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Interested/ }));
+
+    await waitFor(() =>
+      expect(persistDecision).toHaveBeenCalledWith(
+        "interested",
+        expect.objectContaining({ title: "Film One" }),
+      ),
+    );
+    await waitFor(() => expect(screen.getByText("Film Two")).toBeVisible());
+  });
+
+  it("keeps the card in place when persistence fails", async () => {
+    const user = userEvent.setup();
+    const persistDecision = vi.fn().mockRejectedValue(new Error("offline"));
+    render(
+      <DiscoverExperience
+        initialBatch={makeBatch(2)}
+        persistDecision={persistDecision}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Pass/ }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Something went wrong",
+      ),
+    );
+    expect(screen.getByText("Film One")).toBeVisible();
+  });
+
+  it("persists undo before restoring the previous card", async () => {
+    const user = userEvent.setup();
+    const persistDecision = vi.fn().mockResolvedValue(undefined);
+    const persistUndo = vi.fn().mockResolvedValue(undefined);
+    render(
+      <DiscoverExperience
+        initialBatch={makeBatch(2)}
+        persistDecision={persistDecision}
+        persistUndo={persistUndo}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Interested/ }));
+    await waitFor(() => expect(screen.getByText("Film Two")).toBeVisible());
+
+    await user.click(screen.getByRole("button", { name: /Undo/ }));
+
+    await waitFor(() =>
+      expect(persistUndo).toHaveBeenCalledWith(
+        expect.objectContaining({ title: "Film One" }),
+      ),
+    );
+    await waitFor(() => expect(screen.getByText("Film One")).toBeVisible());
+  });
+});
+
+describe("DiscoverExperience end of set", () => {
+  it("offers more recommendations and reports no new candidates", async () => {
+    const user = userEvent.setup();
+    const onRequestMore = vi.fn().mockResolvedValue({ status: "no_new" });
+    render(
+      <DiscoverExperience
+        initialBatch={makeBatch(1)}
+        onRequestMore={onRequestMore}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Pass/ }));
+    const more = await screen.findByRole("button", {
+      name: "Get more recommendations",
+    });
+    await user.click(more);
+
+    await waitFor(() =>
+      expect(onRequestMore).toHaveBeenCalledTimes(1),
+    );
+    expect(
+      await screen.findByText(/No new recommendations right now/),
+    ).toBeVisible();
+  });
+
+  it("does not show the refresh action for anonymous sessions", async () => {
+    const user = userEvent.setup();
+    render(<DiscoverExperience initialBatch={makeBatch(1)} />);
+
+    await user.click(screen.getByRole("button", { name: /Pass/ }));
+
+    expect(
+      screen.queryByRole("button", { name: "Get more recommendations" }),
+    ).not.toBeInTheDocument();
   });
 });

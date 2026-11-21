@@ -25,3 +25,25 @@ def get_recommendation_service(request: Request):
             "The recommendation engine is not ready.",
         )
     return service
+
+
+def get_profile_service(request: Request):
+    service = getattr(request.app.state, "profile_service", None)
+    if service is None:
+        raise APIError(
+            503,
+            "engine_unavailable",
+            "The recommendation engine is not ready.",
+        )
+    return service
+
+
+def get_batch_service(request: Request):
+    service = getattr(request.app.state, "batch_service", None)
+    if service is None:
+        raise APIError(
+            503,
+            "engine_unavailable",
+            "The recommendation engine is not ready.",
+        )
+    return service

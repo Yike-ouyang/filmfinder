@@ -4,6 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import URL
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
@@ -30,10 +31,47 @@ class Settings(BaseSettings):
     max_concurrent_recommendations: int = 1
     tmdb_api_key: str = ""
     tmdb_request_timeout: float = 20.0
+    filmfinder_db_path: str = "var/filmfinder.db"
+    sqlite_busy_timeout_ms: int = 5000
+    app_base_url: str = "http://localhost:3000"
+    email_backend: str = "console"
+    email_from: str = "noreply@filmfinder.local"
+    email_from_name: str = "FilmFinder"
+    brevo_api_key: str = ""
+    brevo_api_url: str = "https://api.brevo.com/v3/smtp/email"
+    email_request_timeout: float = 10.0
+    session_ttl_days: int = 30
+    session_cookie_name: str = "ff_session"
+    csrf_cookie_name: str = "ff_csrf"
+    cookie_secure: bool = False
+    require_email_verification: bool = False
+    email_verification_ttl_hours: int = 24
+    password_reset_ttl_minutes: int = 30
+    password_min_length: int = 10
+    password_max_length: int = 128
+    argon2_memory_cost: int = 19456
+    argon2_time_cost: int = 2
+    argon2_parallelism: int = 1
+    login_rate_limit_attempts: int = 5
+    login_rate_limit_window_seconds: int = 900
+    signup_rate_limit_attempts: int = 5
+    signup_rate_limit_window_seconds: int = 3600
+    email_rate_limit_attempts: int = 3
+    email_rate_limit_window_seconds: int = 900
 
     @property
     def artifacts_path(self) -> Path:
         return _resolve_path(self.filmfinder_artifacts_dir)
+
+    @property
+    def database_path(self) -> Path:
+        return _resolve_path(self.filmfinder_db_path)
+
+    @property
+    def database_url(self) -> str:
+        return URL.create(
+            "sqlite+pysqlite", database=str(self.database_path)
+        ).render_as_string(hide_password=False)
 
     @property
     def tmdb_metadata_file(self) -> Path:

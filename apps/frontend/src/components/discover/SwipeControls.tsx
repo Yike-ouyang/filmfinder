@@ -5,6 +5,7 @@ import { cn } from "@/lib/cn";
 
 interface SwipeControlsProps {
   canUndo: boolean;
+  disabled?: boolean;
   onUndo: () => void;
   onPass: () => void;
   onSeen: () => void;
@@ -65,6 +66,7 @@ function ControlButton({
 
 export function SwipeControls({
   canUndo,
+  disabled = false,
   onUndo,
   onPass,
   onSeen,
@@ -81,13 +83,14 @@ export function SwipeControls({
         shortcut="Backspace"
         icon={RotateCcw}
         onClick={onUndo}
-        disabled={!canUndo}
+        disabled={!canUndo || disabled}
       />
       <ControlButton
         label="Pass"
         shortcut="Left arrow"
         icon={X}
         onClick={onPass}
+        disabled={disabled}
       />
       <ControlButton
         label="Seen"
@@ -95,12 +98,14 @@ export function SwipeControls({
         shortcut="Down arrow"
         icon={Eye}
         onClick={onSeen}
+        disabled={disabled}
       />
       <ControlButton
         label="Interested"
         shortcut="Right arrow"
         icon={Heart}
         onClick={onInterested}
+        disabled={disabled}
         primary
         filledIcon
       />
