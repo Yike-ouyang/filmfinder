@@ -1,4 +1,5 @@
 import {
+  CSRF_COOKIE_NAME,
   RECOMMENDATION_LIMIT,
   UPLOAD_TIMEOUT_MS,
 } from "@/lib/constants";
@@ -43,9 +44,20 @@ const ERROR_MESSAGES: Record<string, string> = {
     "The recommendation engine returned an invalid result. Try again in a moment.",
   engine_unavailable:
     "The recommendation service is not ready yet. Start the backend model and try again.",
-  validation_error: "The upload request was rejected. Try selecting the ZIP again.",
+  validation_error:
+    "Some fields are invalid. Check your input and try again.",
   invalid_response:
     "The recommendation service returned an unexpected response.",
+  weak_password: "Use a stronger password with at least 10 characters.",
+  invalid_credentials: "Invalid email or password.",
+  email_not_verified:
+    "Verify your email address before signing in. You can request a new link below.",
+  invalid_token: "This link is invalid or has expired.",
+  rate_limited: "Too many attempts. Wait a few minutes and try again.",
+  not_authenticated: "Sign in to continue.",
+  csrf_failed:
+    "This request could not be verified. Refresh the page and try again.",
+  invalid_password: "The password is incorrect.",
   backend_unavailable:
     "Cannot reach the FilmFinder backend. Make sure it is running and try again.",
   backend_error:
@@ -65,6 +77,61 @@ export class ApiError extends Error {
     this.code = code;
     this.status = status;
   }
+}
+
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+  const prefix = `${name}=`;
+  const match = document.cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(prefix));
+  if (!match) {
+    return null;
+  }
+  const raw = match.slice(prefix.length);
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+async function fetchCsrfToken(): Promise<string> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/v1/auth/csrf`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      credentials: "include",
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiError("backend_unavailable", null);
+  }
+  if (!response.ok) {
+    throw new ApiError("csrf_failed", response.status);
+  }
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new ApiError("invalid_response", response.status);
+  }
+  if (!isRecord(payload) || typeof payload.csrf_token !== "string") {
+    throw new ApiError("invalid_response", response.status);
+  }
+  return payload.csrf_token;
+}
+
+export async function getCsrfToken(): Promise<string> {
+  const cookieToken = readCookie(CSRF_COOKIE_NAME);
+  if (cookieToken) {
+    return cookieToken;
+  }
+  return fetchCsrfToken();
 }
 
 export interface RequestRecommendationsOptions {
@@ -244,6 +311,13 @@ export async function requestRecommendations({
   const formData = new FormData();
   formData.append("file", file, file.name);
 
+  let csrfToken: string | null = null;
+  try {
+    csrfToken = await getCsrfToken();
+  } catch {
+    csrfToken = null;
+  }
+
   const controller = new AbortController();
   let timedOut = false;
   let externallyAborted = signal?.aborted ?? false;
@@ -267,11 +341,17 @@ export async function requestRecommendations({
 
   try {
     const url = `${API_BASE_URL}/api/v1/recommendations/from-letterboxd?limit=${encodeURIComponent(String(limit))}`;
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+    };
+    if (csrfToken) {
+      headers["X-CSRF-Token"] = csrfToken;
+    }
     const response = await fetch(url, {
       method: "POST",
       body: formData,
-      headers: { Accept: "application/json" },
-      credentials: "omit",
+      headers,
+      credentials: "include",
       cache: "no-store",
       signal: controller.signal,
     });

@@ -2,17 +2,25 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 import math
 import threading
+from typing import Optional
 
 from filmfinder.letterboxd_import import (
     LetterboxdImportError,
     build_movie_matcher,
     load_letterboxd_profile,
 )
+from sqlalchemy.orm import Session
 
 from app.core.exceptions import APIError
 from app.core.zip_security import validate_archive
+from app.db.models import User
+from app.services.profile_service import ProfileService
+
+
+logger = logging.getLogger(__name__)
 
 
 class RecommendationService:
@@ -24,14 +32,7 @@ class RecommendationService:
         limit = max(1, int(settings.max_concurrent_recommendations))
         self.semaphore = threading.BoundedSemaphore(limit)
 
-    def recommend_from_bytes(self, data, limit):
-        limit = int(limit)
-        if limit < 1 or limit > self.engine.pool_size:
-            raise APIError(
-                422,
-                "invalid_limit",
-                f"limit must be between 1 and {self.engine.pool_size}.",
-            )
+    def parse_letterboxd_archive(self, data):
         validate_archive(
             data,
             self.settings.max_upload_bytes,
@@ -39,7 +40,7 @@ class RecommendationService:
             self.settings.max_uncompressed_bytes,
         )
         try:
-            profile = load_letterboxd_profile(
+            return load_letterboxd_profile(
                 io.BytesIO(data),
                 matcher=self.matcher,
             )
@@ -55,8 +56,71 @@ class RecommendationService:
                 "invalid_letterboxd_archive",
                 "The Letterboxd archive could not be parsed.",
             ) from error
-        report = profile.report
-        if int(report.get("ratings_matched", 0)) < 1:
+
+    def recommend_from_bytes(
+        self,
+        data,
+        limit,
+        *,
+        db: Optional[Session] = None,
+        user: Optional[User] = None,
+        profile_service: Optional[ProfileService] = None,
+    ):
+        self._validate_limit(limit)
+        profile = self.parse_letterboxd_archive(data)
+        if user is None:
+            return self.recommend_from_profile(profile, limit)
+
+        if db is None or profile_service is None:
+            raise APIError(
+                500,
+                "profile_persistence_failed",
+                "The imported profile could not be saved.",
+            )
+
+        existing = profile_service.load_profile(db, user.id)
+        if not existing.ratings and not profile.ratings:
+            raise APIError(
+                422,
+                "no_matched_ratings",
+                "No usable Letterboxd ratings could be matched to the catalogue.",
+            )
+        try:
+            profile_service.save_import(db, user, profile)
+        except Exception as error:
+            logger.exception("Letterboxd profile persistence failed.")
+            raise APIError(
+                500,
+                "profile_persistence_failed",
+                "The imported profile could not be saved.",
+            ) from error
+
+        merged = profile_service.load_profile(db, user.id)
+        if not merged.ratings:
+            raise APIError(
+                422,
+                "no_matched_ratings",
+                "No usable Letterboxd ratings could be matched to the catalogue.",
+            )
+        return self.recommend_from_profile(
+            profile,
+            limit,
+            ratings=merged.ratings,
+            watched=merged.watched_movie_ids,
+        )
+
+    def recommend_from_profile(
+        self,
+        profile,
+        limit,
+        *,
+        ratings=None,
+        watched=None,
+    ):
+        limit = self._validate_limit(limit)
+        used_ratings = profile.ratings if ratings is None else ratings
+        used_watched = profile.watched if watched is None else watched
+        if not used_ratings:
             raise APIError(
                 422,
                 "no_matched_ratings",
@@ -66,9 +130,9 @@ class RecommendationService:
             with self.semaphore:
                 recommendations, stats = (
                     self.engine.recommend_new_user_with_stats(
-                        profile.ratings,
+                        used_ratings,
                         top_n=limit,
-                        watched_movie_ids=profile.watched,
+                        watched_movie_ids=used_watched,
                     )
                 )
         except (ValueError, KeyError) as error:
@@ -90,7 +154,9 @@ class RecommendationService:
                 "No recommendations are available for this profile.",
             )
         for recommendation in recommendations:
-            if not math.isfinite(float(recommendation.get("score", float("nan")))):
+            if not math.isfinite(
+                float(recommendation.get("score", float("nan")))
+            ):
                 raise APIError(
                     500,
                     "invalid_score",
@@ -100,6 +166,7 @@ class RecommendationService:
             self.metadata.enrich(recommendation)
             for recommendation in recommendations
         ]
+        report = profile.report
         ratings_total = int(report.get("ratings_total", 0))
         ratings_matched = int(report.get("ratings_matched", 0))
         match_rate = (
@@ -126,3 +193,13 @@ class RecommendationService:
             },
             "recommendations": enriched,
         }
+
+    def _validate_limit(self, limit):
+        limit = int(limit)
+        if limit < 1 or limit > self.engine.pool_size:
+            raise APIError(
+                422,
+                "invalid_limit",
+                f"limit must be between 1 and {self.engine.pool_size}.",
+            )
+        return limit

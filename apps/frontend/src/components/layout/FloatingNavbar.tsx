@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { cn } from "@/lib/cn";
 import { SITE_NAME } from "@/lib/constants";
 
@@ -10,8 +12,26 @@ const links = [
   { href: "/discover", label: "Discover" },
 ];
 
+const navItemClass =
+  "rounded-full px-3 py-2 text-xs font-medium transition-colors duration-300 sm:px-4 sm:text-[13px]";
+
 export function FloatingNavbar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, loading, signOut } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleLogout = async () => {
+    setSigningOut(true);
+    try {
+      await signOut();
+      router.push("/");
+    } catch {
+      router.push("/");
+    } finally {
+      setSigningOut(false);
+    }
+  };
 
   return (
     <header className="safe-top pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center px-4">
@@ -42,7 +62,7 @@ export function FloatingNavbar() {
                 href={link.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "rounded-full px-3 py-2 text-xs font-medium transition-colors duration-300 sm:px-4 sm:text-[13px]",
+                  navItemClass,
                   active
                     ? "bg-white text-black"
                     : "text-white/60 hover:bg-white/5 hover:text-white",
@@ -52,6 +72,52 @@ export function FloatingNavbar() {
               </Link>
             );
           })}
+        </div>
+        <div className="ml-1 flex items-center gap-0.5 border-l border-white/10 pl-1.5">
+          {loading ? (
+            <span className="px-3 py-2 text-xs text-white/25">
+              ...
+            </span>
+          ) : user ? (
+            <>
+              <Link
+                href="/account"
+                aria-current={pathname.startsWith("/account") ? "page" : undefined}
+                className={cn(
+                  navItemClass,
+                  pathname.startsWith("/account")
+                    ? "bg-white text-black"
+                    : "text-white/60 hover:bg-white/5 hover:text-white",
+                )}
+              >
+                Account
+              </Link>
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={signingOut}
+                className={cn(
+                  navItemClass,
+                  "text-white/45 hover:bg-white/5 hover:text-white disabled:opacity-40",
+                )}
+              >
+                {signingOut ? "..." : "Log out"}
+              </button>
+            </>
+          ) : (
+            <Link
+              href="/login"
+              aria-current={pathname.startsWith("/login") ? "page" : undefined}
+              className={cn(
+                navItemClass,
+                pathname.startsWith("/login")
+                  ? "bg-white text-black"
+                  : "text-white/60 hover:bg-white/5 hover:text-white",
+              )}
+            >
+              Log in
+            </Link>
+          )}
         </div>
       </nav>
     </header>

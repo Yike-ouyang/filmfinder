@@ -46,6 +46,16 @@ returns HTTP 503.
 GET /health
 GET /api/v1/ready
 POST /api/v1/recommendations/from-letterboxd?limit=100
+GET /api/v1/auth/csrf
+POST /api/v1/auth/signup
+POST /api/v1/auth/verify-email
+POST /api/v1/auth/resend-verification
+POST /api/v1/auth/login
+POST /api/v1/auth/logout
+GET /api/v1/auth/me
+POST /api/v1/auth/forgot-password
+POST /api/v1/auth/reset-password
+DELETE /api/v1/auth/account
 ```
 
 Health:
@@ -83,6 +93,13 @@ The endpoint:
 7. returns up to `limit` recommendations (`1..100`), enriched with local TMDB
    metadata when available.
 
+When the request carries a valid session cookie, the imported ratings and
+watched films are merged into `user_films` in SQLite. Successive imports update
+existing ratings, add new films, and keep films absent from the new archive.
+Recommendations are then generated from the cumulative saved profile. The
+frontend sends `credentials: include` and `X-CSRF-Token`; anonymous uploads are
+unchanged and never write to SQLite. Raw ZIP archives are never stored.
+
 The response contains `profile`, `recommendation_info`, and
 `recommendations`. Fields `poster_path`, `backdrop_path`, and `tmdb_id` are
 `null` when TMDB metadata is unavailable.
@@ -111,6 +128,74 @@ It writes a coverage report next to the output
 The recommendation backend loads the resulting file once at startup. If the
 file is missing, requests still succeed with null image fields.
 
+## SQLite database
+
+Phase 1 adds the SQLite persistence layer. Migrations are versioned with
+Alembic and are never applied automatically when the API starts.
+
+```bash
+cd apps/backend
+alembic upgrade head
+```
+
+The development database defaults to `apps/backend/var/filmfinder.db`
+(overridable with `FILMFINDER_DB_PATH`). In production, use a path outside the
+repository and outside the public Caddy root, for example
+`/var/lib/filmfinder/filmfinder.db`.
+
+Useful commands:
+
+```bash
+alembic current
+alembic history
+alembic downgrade -1
+alembic check
+```
+
+SQLite connections enable `foreign_keys`, WAL, `busy_timeout`, and
+`synchronous=NORMAL`.
+
+## Authentication
+
+Phase 2 adds email/password accounts. Email verification is disabled by
+default (`REQUIRE_EMAIL_VERIFICATION=false`), so a new account can log in
+immediately with its email and password. Set
+`REQUIRE_EMAIL_VERIFICATION=true` to require the verification link again.
+Existing unverified accounts are marked verified on their first login while
+verification is disabled.
+
+- Passwords are hashed with Argon2id.
+- Session and email tokens are random; only their SHA-256 hashes are stored.
+- The session cookie is `HttpOnly`, `SameSite=Lax`, and `Secure` when
+  `COOKIE_SECURE=true`.
+- CSRF uses a double-submit cookie plus the `X-CSRF-Token` header.
+- Login attempts are rate limited in memory. With a single Uvicorn worker,
+  limits are process-local.
+- `EMAIL_BACKEND=console` logs verification and reset links for local
+  development. No real email is sent.
+- `EMAIL_BACKEND=brevo` sends through the Brevo HTTPS API. Set
+  `BREVO_API_KEY`, `EMAIL_FROM`, and `APP_BASE_URL` in production.
+
+The backend never returns raw session or email tokens in JSON responses.
+
+Production checklist:
+
+```env
+APP_BASE_URL=https://filmfinder.example
+CORS_ORIGINS=https://filmfinder.example
+COOKIE_SECURE=true
+EMAIL_BACKEND=brevo
+BREVO_API_KEY=...
+EMAIL_FROM=verified-sender@example.com
+FILMFINDER_DB_PATH=/var/lib/filmfinder/filmfinder.db
+REQUIRE_EMAIL_VERIFICATION=false
+```
+
+`CORS_ORIGINS` must contain the exact frontend origin because the CSRF check
+validates the `Origin` header. Run `alembic upgrade head` before starting the
+service. Set `REQUIRE_EMAIL_VERIFICATION=true` if you want to enforce email
+verification again.
+
 ## Tests
 
 ```bash
@@ -123,7 +208,8 @@ lookup, and mocked TMDB enrichment. No real TMDB requests are made by tests.
 
 ## Design boundaries
 
-This POC is stateless: no accounts, sessions, database, swipe persistence,
-background workers, or model retraining. A future MySQL layer can be added
-behind a service/repository boundary without changing the recommendation
-engine.
+The public recommendation API remains stateless. Phase 1 introduces the
+SQLite schema and repositories that will back accounts, sessions, Letterboxd
+profiles, swipes, and recommendation history in later phases. The API does not
+create tables at startup, does not retrain models, and does not depend on an
+external database server.

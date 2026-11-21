@@ -25,4 +25,7 @@ export const MAX_UPLOAD_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024;
 
 export const STORAGE_KEY = "filmfinder.recommendation-batch.v1";
 
+export const CSRF_COOKIE_NAME = "ff_csrf";
+export const PASSWORD_MIN_LENGTH = 10;
+
 export const TMDB_WEB_BASE_URL = "https://www.themoviedb.org";

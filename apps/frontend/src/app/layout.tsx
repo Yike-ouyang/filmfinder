@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "@/app/globals.css";
+import { AuthProvider } from "@/components/auth/AuthProvider";
 import { FloatingNavbar } from "@/components/layout/FloatingNavbar";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE } from "@/lib/constants";
 
@@ -54,8 +55,10 @@ export default function RootLayout({
         >
           Skip to content
         </a>
-        <FloatingNavbar />
-        {children}
+        <AuthProvider>
+          <FloatingNavbar />
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

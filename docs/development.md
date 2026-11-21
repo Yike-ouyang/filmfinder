@@ -72,9 +72,18 @@ python packages/recommendation-engine/scripts/generate_recommendations.py \
 pip install -e packages/recommendation-engine
 pip install -e apps/backend
 cp apps/backend/.env.example apps/backend/.env
+alembic -c apps/backend/alembic.ini upgrade head
 cd apps/backend
 uvicorn app.main:app --reload
 ```
+
+For local authentication testing, keep `EMAIL_BACKEND=console`,
+`COOKIE_SECURE=false`, and `REQUIRE_EMAIL_VERIFICATION=false`. Accounts are
+usable immediately after signup. Password reset links are written to the
+Uvicorn logs instead of being sent by email. The frontend runs on
+`http://localhost:3000` with `CORS_ORIGINS=http://localhost:3000` and
+`APP_BASE_URL=http://localhost:3000`. Set
+`REQUIRE_EMAIL_VERIFICATION=true` to test the verification flow again.
 
 ```bash
 curl -X POST \
@@ -92,6 +101,19 @@ python apps/backend/scripts/enrich_tmdb_metadata.py \
 ```
 
 ## Tests
+
+```bash
+python -m pytest -q apps/backend/tests
+python -m pytest -q packages/recommendation-engine/tests
+```
+
+```bash
+cd apps/frontend
+npm run test
+npm run typecheck
+npm run lint
+npm run build
+```
 
 ```bash
 python -m unittest discover -s packages/recommendation-engine/tests -p "test_*.py" -v
