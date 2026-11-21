@@ -16,10 +16,15 @@ from app.api.router import api_router
 from app.core.config import Settings, get_settings
 from app.core.exceptions import APIError
 from app.core.rate_limit import RateLimiter
+from app.db.base import get_session_factory
 from app.services.email_service import build_email_sender
 from app.services.metadata_service import TMDBMetadataService
 from app.services.profile_service import ProfileService
+from app.services.recommendation_batch_service import (
+    RecommendationBatchService,
+)
 from app.services.recommendation_service import RecommendationService
+from app.services.swipe_service import SwipeService
 
 
 logger = logging.getLogger(__name__)
@@ -29,6 +34,7 @@ def create_app(
     app_settings: Optional[Settings] = None,
     *,
     load_engine: bool = True,
+    session_factory=None,
 ) -> FastAPI:
     settings = app_settings or get_settings()
 
@@ -39,6 +45,8 @@ def create_app(
         app.state.engine_error = None
         app.state.recommendation_service = None
         app.state.profile_service = None
+        app.state.swipe_service = None
+        app.state.batch_service = None
         app.state.email_sender = build_email_sender(settings)
         app.state.rate_limiter = RateLimiter()
         if load_engine:
@@ -54,12 +62,29 @@ def create_app(
                     settings,
                 )
                 app.state.profile_service = ProfileService(engine)
+                app.state.swipe_service = SwipeService(
+                    engine,
+                    app.state.metadata,
+                )
+                app.state.batch_service = RecommendationBatchService(
+                    session_factory or get_session_factory(),
+                    app.state.recommendation_service,
+                    app.state.profile_service,
+                    app.state.swipe_service,
+                )
             except Exception as error:
                 app.state.engine_error = str(error)
                 logger.exception("Recommendation engine could not be loaded.")
         else:
             app.state.metadata = TMDBMetadataService({})
-        yield
+        try:
+            yield
+        finally:
+            close_batch_service = getattr(
+                app.state.batch_service, "close", None
+            )
+            if close_batch_service is not None:
+                close_batch_service()
 
     app = FastAPI(
         title="FilmFinder API",

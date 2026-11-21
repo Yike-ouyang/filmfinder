@@ -53,7 +53,7 @@ async function readError(response: Response): Promise<ApiError> {
   return new ApiError(code, response.status);
 }
 
-async function authFetch(
+export async function authenticatedRequest(
   path: string,
   init: RequestInit = {},
 ): Promise<unknown> {
@@ -69,7 +69,7 @@ async function authFetch(
 
   let response: Response;
   try {
-    response = await fetch(`${AUTH_BASE}${path}`, {
+    response = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
       method,
       headers,
@@ -91,6 +91,13 @@ async function authFetch(
     throw new ApiError("invalid_response", response.status);
   }
   return response.json();
+}
+
+function authFetch(
+  path: string,
+  init: RequestInit = {},
+): Promise<unknown> {
+  return authenticatedRequest(`/api/v1/auth${path}`, init);
 }
 
 export async function signup(

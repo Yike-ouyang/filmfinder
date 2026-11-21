@@ -10,6 +10,7 @@ import { SITE_NAME } from "@/lib/constants";
 const links = [
   { href: "/", label: "Home" },
   { href: "/discover", label: "Discover" },
+  { href: "/lists", label: "My Lists" },
 ];
 
 const navItemClass =

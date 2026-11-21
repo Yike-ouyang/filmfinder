@@ -1,8 +1,13 @@
 "use client";
 
 import { motion, useReducedMotion } from "motion/react";
-import { Sparkles } from "lucide-react";
-import type { DecisionKind, ProfileSummary } from "@/types/recommendations";
+import { LoaderCircle, RefreshCw, Sparkles } from "lucide-react";
+import { useState } from "react";
+import type {
+  DecisionKind,
+  ProfileSummary,
+  RequestMoreResult,
+} from "@/types/recommendations";
 
 interface DiscoveryCompleteProps {
   total: number;
@@ -10,6 +15,7 @@ interface DiscoveryCompleteProps {
   profile: ProfileSummary;
   model: string;
   onImportAnother: () => void;
+  onRequestMore?: () => Promise<RequestMoreResult>;
 }
 
 export function DiscoveryComplete({
@@ -18,8 +24,40 @@ export function DiscoveryComplete({
   profile,
   model,
   onImportAnother,
+  onRequestMore,
 }: DiscoveryCompleteProps) {
   const reduceMotion = useReducedMotion();
+  const [requesting, setRequesting] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [messageKind, setMessageKind] = useState<"info" | "error">("info");
+
+  const requestMore = async () => {
+    if (!onRequestMore || requesting) {
+      return;
+    }
+    setRequesting(true);
+    setMessage(null);
+    try {
+      const result = await onRequestMore();
+      if (result.status === "no_new") {
+        setMessageKind("info");
+        setMessage(
+          "No new recommendations right now. Try again after updating your preferences or importing a fresh profile.",
+        );
+      } else if (result.status === "error") {
+        setMessageKind("error");
+        setMessage(
+          result.message ??
+            "New recommendations could not be prepared. Try again in a moment.",
+        );
+      }
+    } catch {
+      setMessageKind("error");
+      setMessage("New recommendations could not be prepared. Try again.");
+    } finally {
+      setRequesting(false);
+    }
+  };
 
   return (
     <motion.section
@@ -37,16 +75,16 @@ export function DiscoveryComplete({
         <Sparkles aria-hidden="true" className="h-5 w-5 text-white/70" />
       </span>
       <p className="mt-5 text-[10px] font-medium uppercase tracking-[0.3em] text-white/50">
-        Session complete
+        End of this set
       </p>
       <h2
         id="discovery-complete-title"
         className="mt-4 text-balance text-3xl font-semibold leading-tight tracking-[-0.035em] text-white sm:text-4xl"
       >
-        You&apos;ve reached the end of your discoveries.
+        You&apos;ve reached the end of these discoveries.
       </h2>
       <p className="mt-4 text-sm text-white/55">
-        Ready for another cinematic journey?
+        Keep going with a fresh set, or import an updated Letterboxd profile.
       </p>
 
       <dl className="mt-6 grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-white/[0.02] px-2 py-4">
@@ -81,13 +119,51 @@ export function DiscoveryComplete({
         {profile.ratings_found} ratings matched · {model}
       </p>
 
-      <button
-        type="button"
-        onClick={onImportAnother}
-        className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-full bg-white px-6 text-sm font-medium text-black transition-opacity hover:opacity-90 sm:w-auto"
-      >
-        Import another profile
-      </button>
+      {message ? (
+        <p
+          role={messageKind === "error" ? "alert" : "status"}
+          className={
+            messageKind === "error"
+              ? "mt-5 rounded-2xl border border-[#e7a6a6]/20 bg-[#e7a6a6]/[0.06] px-4 py-3 text-xs leading-relaxed text-danger/90"
+              : "mt-5 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs leading-relaxed text-white/55"
+          }
+        >
+          {message}
+        </p>
+      ) : null}
+
+      <div className="mt-6 flex flex-col gap-3">
+        {onRequestMore ? (
+          <button
+            type="button"
+            onClick={requestMore}
+            disabled={requesting}
+            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-white px-6 text-sm font-medium text-black transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-70"
+          >
+            {requesting ? (
+              <LoaderCircle
+                aria-hidden="true"
+                className="h-4 w-4 animate-spin"
+              />
+            ) : (
+              <RefreshCw aria-hidden="true" className="h-4 w-4" />
+            )}
+            {requesting ? "Finding more films..." : "Get more recommendations"}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={onImportAnother}
+          disabled={requesting}
+          className={
+            onRequestMore
+              ? "inline-flex h-11 w-full items-center justify-center rounded-full border border-white/10 px-6 text-sm font-medium text-white/65 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-40"
+              : "inline-flex h-11 w-full items-center justify-center rounded-full bg-white px-6 text-sm font-medium text-black transition-opacity hover:opacity-90 disabled:opacity-40 sm:w-auto"
+          }
+        >
+          Import another profile
+        </button>
+      </div>
     </motion.section>
   );
 }

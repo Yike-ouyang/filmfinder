@@ -46,6 +46,8 @@ returns HTTP 503.
 GET /health
 GET /api/v1/ready
 POST /api/v1/recommendations/from-letterboxd?limit=100
+GET /api/v1/recommendations/current
+POST /api/v1/recommendations/refresh
 GET /api/v1/auth/csrf
 POST /api/v1/auth/signup
 POST /api/v1/auth/verify-email
@@ -56,6 +58,10 @@ GET /api/v1/auth/me
 POST /api/v1/auth/forgot-password
 POST /api/v1/auth/reset-password
 DELETE /api/v1/auth/account
+GET /api/v1/swipes
+PUT /api/v1/swipes/{internal_movie_id}
+POST /api/v1/swipes/{internal_movie_id}/undo
+DELETE /api/v1/swipes/{internal_movie_id}
 ```
 
 Health:
@@ -196,6 +202,55 @@ validates the `Origin` header. Run `alembic upgrade head` before starting the
 service. Set `REQUIRE_EMAIL_VERIFICATION=true` if you want to enforce email
 verification again.
 
+## Server recommendations
+
+Authenticated accounts can use server-side recommendation batches:
+
+- `GET /api/v1/recommendations/current` returns the latest ready batch, or
+  `202` while a recalculation is running.
+- `POST /api/v1/recommendations/refresh` queues a new batch. The frontend
+  compares the new batch with the previous one and shows a no-new message when
+  no additional film is available.
+- Login triggers a background recalculation when a saved profile exists.
+- A single background executor and the existing ML semaphore keep ML
+  concurrency at one.
+- Batch history is kept in `recommendation_batches` and
+  `recommendation_items`.
+- `not_interested` and `already_seen` films are excluded. `interested` films
+  may reappear.
+- An unchanged batch is reported to the frontend instead of being retried in a
+  loop.
+
+The public `/from-letterboxd` endpoint remains unchanged for anonymous
+visitors. Authenticated imports also persist the generated batch.
+
+## SQLite backups
+
+```bash
+python apps/backend/scripts/backup_sqlite.py \
+  --source /var/lib/filmfinder/filmfinder.db \
+  --output-dir /var/lib/filmfinder/backups \
+  --retention 14
+```
+
+The script uses SQLite's backup API, so WAL content is included consistently.
+A systemd timer or cron entry can run it daily and keep the last 14 backups.
+
+## Swipes and My Lists
+
+Authenticated users can persist three actions: `interested`, `not_interested`,
+and `already_seen`. The latest action replaces the previous one. Each change is
+also appended to `user_swipe_events` so Undo can restore the previous state or
+remove the decision entirely.
+
+`GET /api/v1/swipes` returns the two visible categories (`interested` and
+`not_interested`); `already_seen` is stored but not listed. All mutation routes
+require the session cookie and `X-CSRF-Token`.
+
+The frontend exposes `/lists` to authenticated users with two tabs. Anonymous
+visitors see account creation and login links instead. During Discover,
+authenticated decisions are saved before the card advances.
+
 ## Tests
 
 ```bash
@@ -204,12 +259,12 @@ python -m pytest -q apps/backend/tests
 
 Tests cover health, readiness, valid/invalid ZIP uploads, limit and size
 validation, no matched ratings, watched exclusion, determinism, metadata
-lookup, and mocked TMDB enrichment. No real TMDB requests are made by tests.
+lookup, mocked TMDB enrichment, authentication, profile persistence, swipe
+history/undo, recommendation batches, exclusions, and SQLite backups. No real TMDB requests are made by tests.
 
 ## Design boundaries
 
-The public recommendation API remains stateless. Phase 1 introduces the
-SQLite schema and repositories that will back accounts, sessions, Letterboxd
-profiles, swipes, and recommendation history in later phases. The API does not
-create tables at startup, does not retrain models, and does not depend on an
-external database server.
+The public recommendation API remains usable without an account. SQLite backs
+accounts, sessions, Letterboxd profiles, swipes, and recommendation history.
+The API does not create tables at startup, does not retrain models, and does
+not depend on an external database server.

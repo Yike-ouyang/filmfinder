@@ -125,11 +125,14 @@ export function loadBatch(): BatchLoadResult {
   const decisions = Array.isArray(candidate.decisions)
     ? validDecisionPrefix(response, candidate.decisions)
     : [];
+  const batchId =
+    typeof candidate.batchId === "number" ? candidate.batchId : undefined;
 
   return {
     status: "ready",
     batch: {
       version: 1,
+      batchId,
       savedAt: candidate.savedAt,
       response,
       decisions,
@@ -141,6 +144,7 @@ export function saveBatch(
   response: RecommendationResponse,
   decisions: Decision[] = [],
   savedAt = Date.now(),
+  batchId?: number,
 ): boolean {
   const storage = getStorage();
   if (!storage) {
@@ -149,6 +153,7 @@ export function saveBatch(
 
   const payload: RecommendationBatch = {
     version: 1,
+    batchId,
     savedAt,
     response,
     decisions,
@@ -166,7 +171,12 @@ export function updateDecisions(
   batch: RecommendationBatch,
   decisions: Decision[],
 ): boolean {
-  return saveBatch(batch.response, decisions, batch.savedAt);
+  return saveBatch(
+    batch.response,
+    decisions,
+    batch.savedAt,
+    batch.batchId,
+  );
 }
 
 export function clearBatch(): void {

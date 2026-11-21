@@ -65,6 +65,7 @@ class RecommendationService:
         db: Optional[Session] = None,
         user: Optional[User] = None,
         profile_service: Optional[ProfileService] = None,
+        excluded_movie_ids: Optional[set[str]] = None,
     ):
         self._validate_limit(limit)
         profile = self.parse_letterboxd_archive(data)
@@ -102,11 +103,13 @@ class RecommendationService:
                 "no_matched_ratings",
                 "No usable Letterboxd ratings could be matched to the catalogue.",
             )
+        watched = set(merged.watched_movie_ids)
+        watched.update(excluded_movie_ids or set())
         return self.recommend_from_profile(
             profile,
             limit,
             ratings=merged.ratings,
-            watched=merged.watched_movie_ids,
+            watched=watched,
         )
 
     def recommend_from_profile(
@@ -126,13 +129,51 @@ class RecommendationService:
                 "no_matched_ratings",
                 "No usable Letterboxd ratings could be matched to the catalogue.",
             )
+        report = profile.report
+        ratings_total = int(report.get("ratings_total", 0))
+        ratings_matched = int(report.get("ratings_matched", 0))
+        match_rate = (
+            ratings_matched / ratings_total if ratings_total else 0.0
+        )
+        summary = {
+            "ratings_found": ratings_total,
+            "ratings_matched": ratings_matched,
+            "watched_movies_matched": int(
+                report.get("watched_matched", 0)
+            ),
+            "match_rate": float(match_rate),
+        }
+        return self._recommend_response(
+            used_ratings,
+            used_watched,
+            limit,
+            summary,
+        )
+
+    def recommend_for_saved_profile(
+        self,
+        ratings,
+        watched,
+        limit,
+        summary,
+    ):
+        limit = self._validate_limit(limit)
+        if not ratings:
+            raise APIError(
+                422,
+                "no_saved_profile",
+                "No saved ratings are available for this account.",
+            )
+        return self._recommend_response(ratings, watched, limit, summary)
+
+    def _recommend_response(self, ratings, watched, limit, summary):
         try:
             with self.semaphore:
-                recommendations, stats = (
+                recommendations, _stats = (
                     self.engine.recommend_new_user_with_stats(
-                        used_ratings,
+                        ratings,
                         top_n=limit,
-                        watched_movie_ids=used_watched,
+                        watched_movie_ids=watched,
                     )
                 )
         except (ValueError, KeyError) as error:
@@ -166,25 +207,12 @@ class RecommendationService:
             self.metadata.enrich(recommendation)
             for recommendation in recommendations
         ]
-        report = profile.report
-        ratings_total = int(report.get("ratings_total", 0))
-        ratings_matched = int(report.get("ratings_matched", 0))
-        match_rate = (
-            ratings_matched / ratings_total if ratings_total else 0.0
-        )
         model = self.engine.store.m5_config.get("model", "M5")
         algorithm = self.engine.store.recommendation_config.get(
             "algorithm", "knn_m5"
         )
         return {
-            "profile": {
-                "ratings_found": ratings_total,
-                "ratings_matched": ratings_matched,
-                "watched_movies_matched": int(
-                    report.get("watched_matched", 0)
-                ),
-                "match_rate": float(match_rate),
-            },
+            "profile": dict(summary),
             "recommendation_info": {
                 "model": str(model),
                 "algorithm": str(algorithm),

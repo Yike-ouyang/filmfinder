@@ -2,7 +2,7 @@
 
 import { AnimatePresence } from "motion/react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DiscoveryComplete } from "@/components/discover/DiscoveryComplete";
 import { MovieBackdrop } from "@/components/discover/MovieBackdrop";
 import { MovieCard } from "@/components/discover/MovieCard";
@@ -11,19 +11,31 @@ import { SwipeControls } from "@/components/discover/SwipeControls";
 import { TmdbAttribution } from "@/components/ui/TmdbAttribution";
 import { useDiscover } from "@/hooks/useDiscover";
 import { usePrefetchImages } from "@/hooks/usePrefetchImages";
+import { errorMessage } from "@/lib/api";
 import { recommendationKey } from "@/lib/recommendations";
 import { clearBatch } from "@/lib/storage";
 import type {
   DecisionKind,
+  Recommendation,
   RecommendationBatch,
+  RequestMoreResult,
 } from "@/types/recommendations";
 
 interface DiscoverExperienceProps {
   initialBatch: RecommendationBatch;
+  persistDecision?: (
+    kind: DecisionKind,
+    recommendation: Recommendation,
+  ) => Promise<void>;
+  persistUndo?: (recommendation: Recommendation) => Promise<void>;
+  onRequestMore?: () => Promise<RequestMoreResult>;
 }
 
 export function DiscoverExperience({
   initialBatch,
+  persistDecision,
+  persistUndo,
+  onRequestMore,
 }: DiscoverExperienceProps) {
   const router = useRouter();
   const {
@@ -41,15 +53,33 @@ export function DiscoverExperience({
   } = useDiscover(initialBatch);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [announcement, setAnnouncement] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const busyRef = useRef(false);
 
   usePrefetchImages(batch.response.recommendations, index);
 
   const handleDecision = useCallback(
-    (kind: DecisionKind) => {
-      if (!current) {
+    async (kind: DecisionKind) => {
+      if (!current || busyRef.current) {
         return;
       }
-      const title = current.title;
+      const recommendation = current;
+      const title = recommendation.title;
+      setError(null);
+      if (persistDecision) {
+        busyRef.current = true;
+        setBusy(true);
+        try {
+          await persistDecision(kind, recommendation);
+        } catch (decisionError) {
+          setError(errorMessage(decisionError));
+          return;
+        } finally {
+          busyRef.current = false;
+          setBusy(false);
+        }
+      }
       decide(kind);
       if (kind === "interested") {
         setAnnouncement(`Interested in ${title}.`);
@@ -59,21 +89,40 @@ export function DiscoverExperience({
         setAnnouncement(`Marked ${title} as already seen.`);
       }
     },
-    [current, decide],
+    [current, decide, persistDecision],
   );
 
-  const handleUndo = useCallback(() => {
+  const handleUndo = useCallback(async () => {
     const lastDecision = decisions[decisions.length - 1];
-    if (!lastDecision) {
+    if (!lastDecision || busyRef.current) {
       return;
     }
     const restored =
       batch.response.recommendations[decisions.length - 1];
+    setError(null);
+    if (persistUndo && restored) {
+      busyRef.current = true;
+      setBusy(true);
+      try {
+        await persistUndo(restored);
+      } catch (undoError) {
+        setError(errorMessage(undoError));
+        return;
+      } finally {
+        busyRef.current = false;
+        setBusy(false);
+      }
+    }
     undo();
     setAnnouncement(
       restored ? `Restored ${restored.title}.` : "Restored the previous film.",
     );
-  }, [batch.response.recommendations, decisions, undo]);
+  }, [
+    batch.response.recommendations,
+    decisions,
+    persistUndo,
+    undo,
+  ]);
 
   const handleImportAnother = () => {
     clearBatch();
@@ -82,7 +131,14 @@ export function DiscoverExperience({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (detailsOpen || !current || event.metaKey || event.ctrlKey || event.altKey) {
+      if (
+        detailsOpen ||
+        !current ||
+        busyRef.current ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      ) {
         return;
       }
       const target = event.target;
@@ -113,7 +169,6 @@ export function DiscoverExperience({
   }, [current, decisions.length, detailsOpen, handleDecision, handleUndo]);
 
   const activeRecommendation = current ?? lastRecommendation;
-  const counter = Math.min(index + 1, total);
 
   return (
     <main
@@ -130,18 +185,7 @@ export function DiscoverExperience({
       <div className="safe-bottom-tight relative z-10 flex min-h-svh flex-col px-5 pt-20 sm:px-8 sm:pt-24">
         <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col">
           <div className="flex h-8 shrink-0 items-center justify-between">
-            <p
-              className="font-mono text-[11px] tracking-[0.16em] text-white/50"
-              aria-label={
-                completed
-                  ? `All ${total} recommendations explored`
-                  : `Recommendation ${counter} of ${total}`
-              }
-            >
-              <span className="text-white/80">{counter}</span>
-              <span className="mx-1 text-white/20">/</span>
-              {total}
-            </p>
+            <span aria-hidden="true" />
             {index === 0 && !completed ? (
               <p className="hidden text-[9px] uppercase tracking-[0.2em] text-white/40 sm:block">
                 Swipe or use the controls
@@ -169,15 +213,25 @@ export function DiscoverExperience({
                   profile={batch.response.profile}
                   model={batch.response.recommendation_info.model}
                   onImportAnother={handleImportAnother}
+                  onRequestMore={onRequestMore}
                 />
               )}
             </AnimatePresence>
           </div>
 
-          <div className="flex min-h-[80px] shrink-0 items-center justify-center sm:min-h-[90px]">
+          <div className="flex min-h-[80px] shrink-0 flex-col items-center justify-center gap-3 sm:min-h-[90px]">
+            {error ? (
+              <p
+                role="alert"
+                className="max-w-md rounded-2xl border border-[#e7a6a6]/20 bg-[#e7a6a6]/[0.06] px-4 py-2.5 text-center text-xs leading-relaxed text-danger/90"
+              >
+                {error}
+              </p>
+            ) : null}
             {current ? (
               <SwipeControls
                 canUndo={decisions.length > 0}
+                disabled={busy}
                 onUndo={handleUndo}
                 onPass={() => handleDecision("passed")}
                 onSeen={() => handleDecision("seen")}

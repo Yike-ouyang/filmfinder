@@ -17,6 +17,24 @@ describe("recommendation storage", () => {
     expect(loadBatch()).toEqual({ status: "missing", batch: null });
   });
 
+  it("preserves the server batch id and decisions", () => {
+    const response = makeResponse(2);
+    const batch = makeBatch(2);
+    expect(
+      saveBatch(response, batch.decisions, batch.savedAt, 42),
+    ).toBe(true);
+
+    const loaded = loadBatch();
+    expect(loaded.batch?.batchId).toBe(42);
+    expect(
+      updateDecisions(
+        { ...batch, batchId: 42 },
+        [{ key: "1001", kind: "interested" }],
+      ),
+    ).toBe(true);
+    expect(loadBatch().batch?.batchId).toBe(42);
+  });
+
   it("saves and restores a batch with decisions", () => {
     const response = makeResponse(3);
     expect(saveBatch(response, [{ key: "1001", kind: "interested" }])).toBe(

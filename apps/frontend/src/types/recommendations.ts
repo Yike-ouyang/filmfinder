@@ -43,6 +43,7 @@ export interface Decision {
 
 export interface RecommendationBatch {
   version: 1;
+  batchId?: number;
   savedAt: number;
   response: RecommendationResponse;
   decisions: Decision[];
@@ -54,3 +55,10 @@ export type BatchLoadStatus =
   | "expired"
   | "invalid"
   | "unavailable";
+
+export type RequestMoreStatus = "ready" | "no_new" | "error";
+
+export interface RequestMoreResult {
+  status: RequestMoreStatus;
+  message?: string;
+}

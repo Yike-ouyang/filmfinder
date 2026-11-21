@@ -35,4 +35,20 @@ describe("SwipeControls", () => {
     setup(false);
     expect(screen.getByRole("button", { name: /Undo/ })).toBeDisabled();
   });
+
+  it("disables every action while a persistence request is pending", () => {
+    render(
+      <SwipeControls
+        canUndo
+        disabled
+        onUndo={vi.fn()}
+        onPass={vi.fn()}
+        onSeen={vi.fn()}
+        onInterested={vi.fn()}
+      />,
+    );
+    for (const button of screen.getAllByRole("button")) {
+      expect(button).toBeDisabled();
+    }
+  });
 });

@@ -58,6 +58,15 @@ const ERROR_MESSAGES: Record<string, string> = {
   csrf_failed:
     "This request could not be verified. Refresh the page and try again.",
   invalid_password: "The password is incorrect.",
+  movie_not_found: "This film is not in the FilmFinder catalogue.",
+  swipe_not_found: "This decision no longer exists.",
+  swipe_persistence_failed:
+    "Your preference could not be saved. Try again in a moment.",
+  invalid_swipe_action: "This preference is not supported.",
+  generation_failed:
+    "Recommendations could not be generated. Try again or import a profile.",
+  no_saved_profile:
+    "Import a Letterboxd profile before requesting recommendations.",
   backend_unavailable:
     "Cannot reach the FilmFinder backend. Make sure it is running and try again.",
   backend_error:

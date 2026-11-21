@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from datetime import datetime
+from typing import Any, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -39,3 +40,14 @@ class RecommendationResponse(BaseModel):
     profile: ProfileSummary
     recommendation_info: RecommendationInfo
     recommendations: List[RecommendationItem]
+
+
+class CurrentRecommendationsResponse(BaseModel):
+    status: Literal["ready", "refreshing", "pending", "failed"]
+    batch_id: Optional[int] = None
+    generated_at: Optional[datetime] = None
+    response: Optional[RecommendationResponse] = None
+
+
+class RefreshResponse(BaseModel):
+    status: Literal["pending", "no_new_candidates"]

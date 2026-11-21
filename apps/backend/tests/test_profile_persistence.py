@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 from app.core.security import hash_token
 from app.db.base import build_session_factory, create_db_engine
-from app.db.models import User, UserFilm, UserSession, utcnow
+from app.db.models import User, UserFilm, UserSession, UserSwipe, utcnow
 from app.db.session import get_db
 
 
@@ -26,6 +26,14 @@ def _alembic_config(database_url: str) -> Config:
     config.set_main_option("script_location", str(BACKEND_ROOT / "migrations"))
     config.set_main_option("sqlalchemy.url", database_url)
     return config
+
+
+class NoopBatchService:
+    def store_ready_batch(self, _user_id, _response):
+        return 0
+
+    def close(self):
+        return None
 
 
 @pytest.fixture()
@@ -48,9 +56,12 @@ def profile_client(client, tmp_path):
 
     client.cookies.clear()
     client.app.dependency_overrides[get_db] = override_db
+    previous_batch_service = client.app.state.batch_service
+    client.app.state.batch_service = NoopBatchService()
     try:
         yield client, session_factory
     finally:
+        client.app.state.batch_service = previous_batch_service
         client.app.dependency_overrides.pop(get_db, None)
         client.cookies.clear()
         engine.dispose()
@@ -356,3 +367,38 @@ def test_cumulative_profile_excludes_previous_imports(
         str(item["movie_id"]) for item in response.json()["recommendations"]
     }
     assert returned.isdisjoint(excluded)
+
+
+def test_authenticated_import_excludes_swiped_films(
+    profile_client, letterboxd_zip
+):
+    client, session_factory = profile_client
+    user_id, session_token, csrf_token = _create_session(session_factory)
+    _authenticate(client, session_token, csrf_token)
+
+    first = _upload(client, letterboxd_zip, csrf_token)
+    assert first.status_code == 200
+    film = first.json()["recommendations"][0]
+    with session_factory() as session:
+        session.add(
+            UserSwipe(
+                user_id=user_id,
+                internal_movie_id=film["internal_movie_id"],
+                movie_id=str(film["movie_id"]),
+                action="not_interested",
+                title=film["title"],
+                year=film["year"],
+                genres=film["genres"],
+                updated_at=utcnow(),
+            )
+        )
+        session.commit()
+
+    second = _upload(client, letterboxd_zip, csrf_token)
+
+    assert second.status_code == 200
+    returned = {
+        item["internal_movie_id"]
+        for item in second.json()["recommendations"]
+    }
+    assert film["internal_movie_id"] not in returned

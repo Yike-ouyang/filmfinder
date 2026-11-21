@@ -591,3 +591,117 @@ def test_password_reset_works_without_prior_verification(auth_open):
         "/api/v1/auth/login",
         {"email": "user@example.com", "password": "new correct horse battery"},
     ).status_code == 200
+
+
+class FakeBatchService:
+    def __init__(self):
+        self.generation_calls = []
+        self.current_payload = {
+            "status": "ready",
+            "batch_id": 7,
+            "generated_at": "2026-11-21T10:00:00",
+            "response": {
+                "profile": {
+                    "ratings_found": 1,
+                    "ratings_matched": 1,
+                    "watched_movies_matched": 1,
+                    "match_rate": 1.0,
+                },
+                "recommendation_info": {
+                    "model": "M5",
+                    "algorithm": "knn_m5",
+                    "requested_count": 100,
+                    "returned_count": 1,
+                },
+                "recommendations": [
+                    {
+                        "rank": 1,
+                        "movie_id": "movie-1",
+                        "internal_movie_id": 1,
+                        "title": "Film One",
+                        "year": 2000,
+                        "genres": ["Drama"],
+                        "score": 9.0,
+                        "score_type": "m5_predicted_rating",
+                        "tmdb_id": 10,
+                        "poster_path": "/poster.jpg",
+                        "backdrop_path": None,
+                    }
+                ],
+            },
+        }
+        self.refresh_status = "queued"
+
+    def request_generation(self, user_id, *, reason="login"):
+        self.generation_calls.append((user_id, reason))
+        return self.refresh_status
+
+    def current(self, user_id):
+        return self.current_payload
+
+
+def test_login_schedules_recommendation_generation(auth):
+    fake = FakeBatchService()
+    auth.app.state.batch_service = fake
+    _verified_user(auth.client, auth)
+
+    response = _login(auth.client)
+
+    assert response.status_code == 200
+    assert len(fake.generation_calls) == 1
+    assert fake.generation_calls[0][1] == "login"
+
+
+def test_current_recommendations_endpoint(auth):
+    fake = FakeBatchService()
+    auth.app.state.batch_service = fake
+    _verified_user(auth.client, auth)
+    assert _login(auth.client).status_code == 200
+
+    response = auth.client.get("/api/v1/recommendations/current")
+
+    assert response.status_code == 200
+    assert response.json()["batch_id"] == 7
+    assert response.json()["response"]["recommendations"][0]["title"] == "Film One"
+
+
+def test_current_recommendations_pending_returns_202(auth):
+    fake = FakeBatchService()
+    fake.current_payload = {
+        "status": "pending",
+        "batch_id": 8,
+        "generated_at": None,
+        "response": None,
+    }
+    auth.app.state.batch_service = fake
+    _verified_user(auth.client, auth)
+    assert _login(auth.client).status_code == 200
+
+    response = auth.client.get("/api/v1/recommendations/current")
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "pending"
+
+
+def test_refresh_recommendations_endpoint(auth):
+    fake = FakeBatchService()
+    auth.app.state.batch_service = fake
+    _verified_user(auth.client, auth)
+    assert _login(auth.client).status_code == 200
+
+    response = auth.client.post(
+        "/api/v1/recommendations/refresh",
+        headers={CSRF_HEADER: auth.client.cookies.get("ff_csrf") or ""},
+    )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "pending"
+    assert fake.generation_calls[-1][1] == "refresh"
+
+    fake.refresh_status = "no_new_candidates"
+    no_new = auth.client.post(
+        "/api/v1/recommendations/refresh",
+        headers={CSRF_HEADER: auth.client.cookies.get("ff_csrf") or ""},
+    )
+    assert no_new.status_code == 200
+    assert no_new.json()["status"] == "no_new_candidates"

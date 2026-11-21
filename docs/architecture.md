@@ -184,7 +184,18 @@ remains usable without an account.
 
 Phase 3 persists authenticated Letterboxd imports in `user_films`, merges
 successive imports, and generates recommendations from the cumulative saved
-profile. Swipe storage and recommendation history are added in later phases.
+profile.
+
+Phase 4 persists swipe decisions in `user_swipes` with an append-only
+`user_swipe_events` history for Undo. The `My Lists` page exposes the
+`interested` and `not_interested` categories.
+
+Phase 5 adds server-side recommendation batches. Login schedules a background
+recalculation, and the engine excludes `not_interested`, `already_seen`, rated,
+and watched films. Batch history is stored in `recommendation_batches` and
+`recommendation_items`. Phase 6 removes the discovery counter and adds a
+server-backed "Get more recommendations" action at the end of a batch, with an
+explicit no-new-candidates state.
 
 TMDB image metadata is loaded from a local JSON produced by
 `apps/backend/scripts/enrich_tmdb_metadata.py`. Recommendation requests never

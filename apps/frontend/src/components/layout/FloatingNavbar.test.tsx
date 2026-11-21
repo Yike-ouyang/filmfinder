@@ -44,6 +44,10 @@ describe("FloatingNavbar auth state", () => {
       "href",
       "/login",
     );
+    expect(screen.getByRole("link", { name: "My Lists" })).toHaveAttribute(
+      "href",
+      "/lists",
+    );
   });
 
   it("shows account controls for signed-in users", async () => {

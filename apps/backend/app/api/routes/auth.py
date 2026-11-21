@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import timedelta
 from typing import Optional
 
@@ -45,6 +46,8 @@ from app.services.auth_service import (
     AuthService,
 )
 
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -250,6 +253,14 @@ def login(
         result.csrf_token,
         max_age,
     )
+    batch_service = getattr(request.app.state, "batch_service", None)
+    if batch_service is not None:
+        try:
+            batch_service.request_generation(
+                result.user.id, reason="login"
+            )
+        except Exception:
+            logger.exception("Could not schedule recommendations after login.")
     return _user_response(result.user)
 
 
