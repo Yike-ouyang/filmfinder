@@ -28,6 +28,8 @@ dist/
 # Raw data (never commit)
 data/
 datasets/
+!apps/backend/app/data/
+!apps/backend/app/data/*.json
 raw/
 /Data/
 *.npy

@@ -43,6 +43,9 @@ BREVO_API_KEY=...
 EMAIL_FROM=verified-sender@example.com
 FILMFINDER_DB_PATH=/var/lib/filmfinder/filmfinder.db
 REQUIRE_EMAIL_VERIFICATION=false
+TASTE_PROFILE_PATH=app/data/quick_taste_movies.json
+TASTE_PROFILE_RATE_LIMIT_ATTEMPTS=20
+TASTE_PROFILE_RATE_LIMIT_WINDOW_SECONDS=600
 ```
 
 `CORS_ORIGINS` must contain the exact frontend origin because the CSRF check
@@ -96,6 +99,12 @@ rsync -avh out/ filmfinder@VPS:/var/www/filmfinder/
 
 The static frontend needs no restart. Deploy the backend first when new API
 routes are introduced.
+
+The Quick Taste Profile adds no service: the 20-film JSON is loaded at backend
+startup, inference reuses the existing serialized engine, and the in-memory
+rate limiter is sufficient for the single-worker deployment. Regenerate the
+JSON with `packages/recommendation-engine/scripts/select_quick_taste_movies.py`
+only when the catalogue artifacts change.
 
 ## Verification
 

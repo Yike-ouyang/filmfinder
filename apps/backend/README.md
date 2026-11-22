@@ -46,6 +46,8 @@ returns HTTP 503.
 GET /health
 GET /api/v1/ready
 POST /api/v1/recommendations/from-letterboxd?limit=100
+GET /api/v1/taste-profile/movies
+POST /api/v1/taste-profile/recommendations?limit=100
 GET /api/v1/recommendations/current
 POST /api/v1/recommendations/refresh
 GET /api/v1/auth/csrf
@@ -109,6 +111,44 @@ unchanged and never write to SQLite. Raw ZIP archives are never stored.
 The response contains `profile`, `recommendation_info`, and
 `recommendations`. Fields `poster_path`, `backdrop_path`, and `tmdb_id` are
 `null` when TMDB metadata is unavailable.
+
+## Quick Taste Profile
+
+Visitors without a Letterboxd account can rate 20 fixed films and receive
+recommendations from the same cold-start + KNN/M5 pipeline.
+
+```http
+GET /api/v1/taste-profile/movies
+POST /api/v1/taste-profile/recommendations?limit=100
+```
+
+The movie set is frozen in
+`apps/backend/app/data/quick_taste_movies.json`. It is generated offline by
+`packages/recommendation-engine/scripts/select_quick_taste_movies.py`; the
+selection criteria and indicators are documented in
+`docs/quick-taste-profile.md`.
+
+The POST body must contain exactly the 20 configured movies:
+
+```json
+{
+  "answers": [
+    {"internal_movie_id": 1811, "rating": 8},
+    {"internal_movie_id": 2112, "rating": null}
+  ]
+}
+```
+
+`rating` is `3`, `5`, `8`, or `null` for No opinion. No opinion answers are
+ignored and never mark a film as watched. At least 3 ratings are required.
+Rated films are excluded from the returned recommendations. Anonymous requests
+are stateless; authenticated requests save the ratings to `user_films` through
+the same upsert path as Letterboxd imports. A quiz rating replaces an existing
+rating for the same film. A later import preserves films absent from the
+archive and replaces ratings for films present in it.
+
+The frontend exposes this flow at `/taste-profile` and reuses the existing
+session-storage recommendation batch before redirecting to `/discover`.
 
 ## TMDB metadata enrichment
 
@@ -259,8 +299,9 @@ python -m pytest -q apps/backend/tests
 
 Tests cover health, readiness, valid/invalid ZIP uploads, limit and size
 validation, no matched ratings, watched exclusion, determinism, metadata
-lookup, mocked TMDB enrichment, authentication, profile persistence, swipe
-history/undo, recommendation batches, exclusions, and SQLite backups. No real TMDB requests are made by tests.
+lookup, mocked TMDB enrichment, Quick Taste selection/validation/recommendations,
+authentication, profile persistence, swipe history/undo, recommendation batches,
+exclusions, and SQLite backups. No real TMDB requests are made by tests.
 
 ## Design boundaries
 

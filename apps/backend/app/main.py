@@ -25,6 +25,7 @@ from app.services.recommendation_batch_service import (
 )
 from app.services.recommendation_service import RecommendationService
 from app.services.swipe_service import SwipeService
+from app.services.taste_profile_service import TasteProfileService
 
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,8 @@ def create_app(
         app.state.profile_service = None
         app.state.swipe_service = None
         app.state.batch_service = None
+        app.state.taste_profile_service = None
+        app.state.taste_profile_error = None
         app.state.email_sender = build_email_sender(settings)
         app.state.rate_limiter = RateLimiter()
         if load_engine:
@@ -75,6 +78,20 @@ def create_app(
             except Exception as error:
                 app.state.engine_error = str(error)
                 logger.exception("Recommendation engine could not be loaded.")
+            if app.state.engine is not None:
+                try:
+                    app.state.taste_profile_service = (
+                        TasteProfileService.load(
+                            app.state.engine,
+                            app.state.metadata,
+                            settings.taste_profile_file,
+                        )
+                    )
+                except Exception as error:
+                    app.state.taste_profile_error = str(error)
+                    logger.exception(
+                        "Quick Taste Profile could not be loaded."
+                    )
         else:
             app.state.metadata = TMDBMetadataService({})
         try:

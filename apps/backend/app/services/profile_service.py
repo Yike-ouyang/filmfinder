@@ -66,6 +66,34 @@ class ProfileService:
             db.rollback()
             raise
 
+    def save_ratings(
+        self,
+        db: Session,
+        user: User,
+        ratings_internal: dict,
+        now: Optional[datetime] = None,
+    ) -> None:
+        saved_at = now or utcnow()
+        rows = []
+        for internal_id, rating in dict(ratings_internal or {}).items():
+            row = self._row(
+                user.id,
+                int(internal_id),
+                float(rating),
+                saved_at,
+            )
+            if row is not None:
+                rows.append(row)
+        if not rows:
+            return
+        try:
+            for chunk in _chunks(rows):
+                db.execute(_rated_upsert(chunk))
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+
     def load_profile(self, db: Session, user_id: int) -> SavedProfile:
         rows = db.execute(
             select(UserFilm.movie_id, UserFilm.rating).where(

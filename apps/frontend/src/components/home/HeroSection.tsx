@@ -1,4 +1,5 @@
 import { HowItWorks } from "@/components/home/HowItWorks";
+import { QuickTasteCTA } from "@/components/home/QuickTasteCTA";
 import { LetterboxdUploader } from "@/components/home/LetterboxdUploader";
 import { TmdbAttribution } from "@/components/ui/TmdbAttribution";
 import { TmdbMedia } from "@/components/ui/TmdbMedia";
@@ -56,6 +57,8 @@ export function HeroSection() {
             <LetterboxdUploader />
             <HowItWorks />
           </div>
+
+          <QuickTasteCTA />
         </div>
       </div>
 

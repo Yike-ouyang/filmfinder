@@ -47,3 +47,14 @@ def get_batch_service(request: Request):
             "The recommendation engine is not ready.",
         )
     return service
+
+
+def get_taste_profile_service(request: Request):
+    service = getattr(request.app.state, "taste_profile_service", None)
+    if service is None:
+        raise APIError(
+            503,
+            "engine_unavailable",
+            "The Quick Taste Profile service is not ready.",
+        )
+    return service

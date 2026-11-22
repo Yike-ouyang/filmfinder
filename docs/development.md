@@ -100,6 +100,16 @@ python apps/backend/scripts/enrich_tmdb_metadata.py \
   --resume
 ```
 
+Quick Taste Profile configuration:
+
+```bash
+python packages/recommendation-engine/scripts/select_quick_taste_movies.py
+```
+
+This writes `apps/backend/app/data/quick_taste_movies.json` and
+`docs/quick-taste-profile.md`. It requires the production artifacts and is only
+needed when the catalogue changes.
+
 ## Tests
 
 ```bash

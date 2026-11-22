@@ -1,12 +1,18 @@
 import {
   CSRF_COOKIE_NAME,
   RECOMMENDATION_LIMIT,
+  TASTE_PROFILE_TIMEOUT_MS,
   UPLOAD_TIMEOUT_MS,
 } from "@/lib/constants";
 import type {
   Recommendation,
   RecommendationResponse,
 } from "@/types/recommendations";
+import type {
+  TasteProfileAnswer,
+  TasteProfileMovie,
+  TasteProfileMoviesResponse,
+} from "@/types/tasteProfile";
 
 const DEFAULT_API_BASE_URL = "http://localhost:8000";
 
@@ -35,6 +41,14 @@ const ERROR_MESSAGES: Record<string, string> = {
     "We could not match enough of your ratings to the FilmFinder catalogue. Try a profile with more rated films.",
   no_recommendations:
     "No recommendations are available for this profile right now.",
+  insufficient_taste_ratings:
+    "Rate at least 3 movies to get personalized recommendations.",
+  invalid_taste_selection:
+    "The Taste Profile answers do not match the current movie selection. Refresh the page and try again.",
+  invalid_taste_rating:
+    "A Taste Profile rating is invalid. Refresh the page and try again.",
+  profile_persistence_failed:
+    "Your Taste Profile ratings could not be saved. Try again in a moment.",
   invalid_limit: "The recommendation settings are invalid.",
   recommendation_input_error:
     "This profile could not be used to generate recommendations.",
@@ -305,10 +319,258 @@ function statusFallbackCode(status: number): string {
   if (status === 422) {
     return "validation_error";
   }
+  if (status === 429) {
+    return "rate_limited";
+  }
   if (status === 503) {
     return "engine_unavailable";
   }
   return "backend_error";
+}
+
+function normalizeTasteProfileMovie(
+  value: unknown,
+): TasteProfileMovie {
+  if (!isRecord(value)) {
+    throw new ApiError("invalid_response", 200);
+  }
+  const internalMovieId = asInteger(value.internal_movie_id);
+  const movieId = asString(value.movie_id);
+  const title = asString(value.title);
+  if (internalMovieId === null || !movieId || !title) {
+    throw new ApiError(
+      "invalid_response",
+      200,
+      "A Taste Profile movie is missing required fields.",
+    );
+  }
+  const genres = Array.isArray(value.genres)
+    ? value.genres.filter(
+        (genre): genre is string => typeof genre === "string",
+      )
+    : [];
+  return {
+    internal_movie_id: internalMovieId,
+    movie_id: movieId,
+    title,
+    year: asInteger(value.year),
+    genres,
+    tmdb_id: asInteger(value.tmdb_id),
+    poster_path: asNullableString(value.poster_path),
+    backdrop_path: asNullableString(value.backdrop_path),
+  };
+}
+
+export function normalizeTasteProfileMoviesResponse(
+  payload: unknown,
+): TasteProfileMoviesResponse {
+  if (!isRecord(payload) || !Array.isArray(payload.movies)) {
+    throw new ApiError("invalid_response", 200);
+  }
+  const minRatings = asInteger(payload.min_ratings);
+  const scale = payload.rating_scale;
+  if (
+    minRatings === null ||
+    minRatings < 1 ||
+    !isRecord(scale)
+  ) {
+    throw new ApiError(
+      "invalid_response",
+      200,
+      "The Taste Profile response is incomplete.",
+    );
+  }
+  const loved = asInteger(scale.loved);
+  const okay = asInteger(scale.okay);
+  const disliked = asInteger(scale.disliked);
+  if (loved === null || okay === null || disliked === null) {
+    throw new ApiError(
+      "invalid_response",
+      200,
+      "The Taste Profile rating scale is incomplete.",
+    );
+  }
+  if (payload.movies.length === 0) {
+    throw new ApiError("invalid_response", 200);
+  }
+  return {
+    movies: payload.movies.map(normalizeTasteProfileMovie),
+    min_ratings: minRatings,
+    rating_scale: { loved, okay, disliked },
+  };
+}
+
+export interface RequestTasteProfileMoviesOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
+
+export async function requestTasteProfileMovies({
+  signal,
+  timeoutMs = TASTE_PROFILE_TIMEOUT_MS,
+}: RequestTasteProfileMoviesOptions = {}): Promise<TasteProfileMoviesResponse> {
+  const controller = new AbortController();
+  let timedOut = false;
+  let externallyAborted = signal?.aborted ?? false;
+
+  const onExternalAbort = () => {
+    externallyAborted = true;
+    controller.abort();
+  };
+
+  if (signal) {
+    if (signal.aborted) {
+      throw new ApiError("cancelled", null);
+    }
+    signal.addEventListener("abort", onExternalAbort, { once: true });
+  }
+
+  const timeout = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/taste-profile/movies`,
+      {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        credentials: "include",
+        cache: "no-store",
+        signal: controller.signal,
+      },
+    );
+    if (!response.ok) {
+      const code =
+        (await readErrorCode(response)) ??
+        statusFallbackCode(response.status);
+      throw new ApiError(code, response.status);
+    }
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      throw new ApiError("invalid_response", response.status);
+    }
+    return normalizeTasteProfileMoviesResponse(payload);
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    if (error instanceof DOMException && error.name === "AbortError") {
+      if (timedOut) {
+        throw new ApiError("timeout", null);
+      }
+      if (externallyAborted) {
+        throw new ApiError("cancelled", null);
+      }
+      throw new ApiError("timeout", null);
+    }
+    if (error instanceof TypeError) {
+      throw new ApiError("backend_unavailable", null);
+    }
+    throw new ApiError("backend_error", null);
+  } finally {
+    window.clearTimeout(timeout);
+    signal?.removeEventListener("abort", onExternalAbort);
+  }
+}
+
+export interface RequestTasteProfileRecommendationsOptions {
+  answers: TasteProfileAnswer[];
+  limit?: number;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
+
+export async function requestTasteProfileRecommendations({
+  answers,
+  limit = RECOMMENDATION_LIMIT,
+  signal,
+  timeoutMs = TASTE_PROFILE_TIMEOUT_MS,
+}: RequestTasteProfileRecommendationsOptions): Promise<RecommendationResponse> {
+  let csrfToken: string | null = null;
+  try {
+    csrfToken = await getCsrfToken();
+  } catch {
+    csrfToken = null;
+  }
+
+  const controller = new AbortController();
+  let timedOut = false;
+  let externallyAborted = signal?.aborted ?? false;
+
+  const onExternalAbort = () => {
+    externallyAborted = true;
+    controller.abort();
+  };
+
+  if (signal) {
+    if (signal.aborted) {
+      throw new ApiError("cancelled", null);
+    }
+    signal.addEventListener("abort", onExternalAbort, { once: true });
+  }
+
+  const timeout = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    };
+    if (csrfToken) {
+      headers["X-CSRF-Token"] = csrfToken;
+    }
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/taste-profile/recommendations?limit=${encodeURIComponent(String(limit))}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ answers }),
+        headers,
+        credentials: "include",
+        cache: "no-store",
+        signal: controller.signal,
+      },
+    );
+    if (!response.ok) {
+      const code =
+        (await readErrorCode(response)) ??
+        statusFallbackCode(response.status);
+      throw new ApiError(code, response.status);
+    }
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      throw new ApiError("invalid_response", response.status);
+    }
+    return normalizeRecommendationResponse(payload);
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    if (error instanceof DOMException && error.name === "AbortError") {
+      if (timedOut) {
+        throw new ApiError("timeout", null);
+      }
+      if (externallyAborted) {
+        throw new ApiError("cancelled", null);
+      }
+      throw new ApiError("timeout", null);
+    }
+    if (error instanceof TypeError) {
+      throw new ApiError("backend_unavailable", null);
+    }
+    throw new ApiError("backend_error", null);
+  } finally {
+    window.clearTimeout(timeout);
+    signal?.removeEventListener("abort", onExternalAbort);
+  }
 }
 
 export async function requestRecommendations({

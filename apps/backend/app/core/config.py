@@ -58,10 +58,17 @@ class Settings(BaseSettings):
     signup_rate_limit_window_seconds: int = 3600
     email_rate_limit_attempts: int = 3
     email_rate_limit_window_seconds: int = 900
+    taste_profile_path: str = "app/data/quick_taste_movies.json"
+    taste_profile_rate_limit_attempts: int = 20
+    taste_profile_rate_limit_window_seconds: int = 600
 
     @property
     def artifacts_path(self) -> Path:
         return _resolve_path(self.filmfinder_artifacts_dir)
+
+    @property
+    def taste_profile_file(self) -> Path:
+        return _resolve_path(self.taste_profile_path)
 
     @property
     def database_path(self) -> Path:

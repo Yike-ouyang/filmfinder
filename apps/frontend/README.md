@@ -1,8 +1,8 @@
 # FilmFinder frontend
 
-Cinematic Next.js frontend for FilmFinder. Import a Letterboxd ZIP export,
-let the existing FastAPI recommendation backend analyze the profile, then
-discover the results through a swipe-based interface.
+Cinematic Next.js frontend for FilmFinder. Import a Letterboxd ZIP export or
+rate 20 films with the Quick Taste Profile, then discover recommendations
+through a swipe-based interface.
 
 ## Stack
 
@@ -59,8 +59,12 @@ after changing them. No TMDB token is used by the frontend.
 ## Routes
 
 ```text
-/           Letterboxd ZIP import and cinematic landing page
-/discover   Swipe-based recommendation discovery
+/               Letterboxd import / Quick Taste entry point
+/taste-profile  Rate 20 films without a Letterboxd account
+/discover       Swipe-based recommendation discovery
+/lists          Saved interested / not-interested films
+/account        Account settings
+/login /signup  Authentication
 ```
 
 The floating navigation links both routes. Opening `/discover` without a
@@ -72,7 +76,8 @@ The frontend calls:
 
 ```http
 POST /api/v1/recommendations/from-letterboxd?limit=100
-Content-Type: multipart/form-data
+GET  /api/v1/taste-profile/movies
+POST /api/v1/taste-profile/recommendations?limit=100
 ```
 
 The multipart field is named `file`. The request is sent once per import and
@@ -99,14 +104,16 @@ Known backend error codes handled by the client include `invalid_zip`,
 
 ## Local state and privacy
 
-- Only the current recommendation batch, its profile summary, and local swipe
+- The current recommendation batch, its profile summary, and local swipe
   decisions are stored in `sessionStorage`.
 - The ZIP file is never stored in browser storage.
-- Raw Letterboxd ratings are never stored in the browser.
-- The session expires after 24 hours and is cleared when starting a new
-  import from the end screen.
-- There are no accounts, cookies, database writes, or server-side sessions.
-- The frontend does not send swipe feedback to the backend.
+- Anonymous Letterboxd ratings are processed in memory; signed-in imports are
+  merged into SQLite.
+- Quick Taste answers are kept in React state. Anonymous answers are sent to
+  the backend for inference only; signed-in answers are merged into the saved
+  profile. An anonymous draft can be kept in `sessionStorage` until the visitor
+  creates an account.
+- Session cookies and CSRF cookies are used for authenticated API requests.
 
 ## TMDB images
 
@@ -154,9 +161,10 @@ The suite covers:
 
 ## Known limitations
 
-- The app is a stateless proof of concept: no authentication, accounts,
-  recommendation history, or database.
 - Recommendation sessions are per browser tab and expire after 24 hours.
+- Anonymous Quick Taste drafts live in `sessionStorage`; they are lost when the
+  tab closes.
+- Account features require the SQLite backend and Alembic migrations.
 - The backend must be running and CORS must allow the frontend origin.
 - The client-side upload limit must match the backend limit; the backend
   remains the source of truth.

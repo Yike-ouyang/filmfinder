@@ -183,6 +183,19 @@ python packages/recommendation-engine/scripts/verify_export.py --artifacts packa
 The verifier checks loading, existing-user recommendations, new-user
 recommendations, rated-movie exclusion and score ordering.
 
+## Quick Taste Profile selection
+
+The Quick Taste set is prepared offline from the same artifacts:
+
+```bash
+python packages/recommendation-engine/scripts/select_quick_taste_movies.py
+```
+
+It writes `apps/backend/app/data/quick_taste_movies.json` and
+`docs/quick-taste-profile.md`. The selection combines rating popularity,
+rating variance, M5 latent diversity, genre Jaccard and decade coverage. The
+list is frozen; inference never recalculates it per request.
+
 ## Tests
 
 ```bash

@@ -2,15 +2,15 @@
 
 Film recommendation system based on a contextual Factorization Machine (M5)
 and a KNN candidate generator. The repository is organized as a monorepo for
-research, the production recommendation engine, and the future web application.
+research, the production recommendation engine, and the web application.
 
 ## Repository layout
 
 ```text
 .
 ├── apps/
-│   ├── backend/                 # minimal FastAPI scaffold
-│   └── frontend/                # future Next.js application (placeholder)
+│   ├── backend/                 # FastAPI API, SQLite accounts, recommendation batches
+│   └── frontend/                # Next.js static-export application
 ├── packages/
 │   └── recommendation-engine/   # installable inference package
 ├── research/
@@ -25,6 +25,7 @@ research, the production recommendation engine, and the future web application.
 │   ├── architecture.md
 │   ├── development.md
 │   ├── deployment.md
+│   ├── quick-taste-profile.md
 │   ├── repository-migration.md
 │   └── frontend.md
 ├── prompts/                     # task specifications
@@ -32,6 +33,19 @@ research, the production recommendation engine, and the future web application.
 ├── README.md
 └── pyproject.toml
 ```
+
+## Web application
+
+The frontend supports two entry points:
+
+- import a Letterboxd ZIP export;
+- use the Quick Taste Profile to rate 20 fixed films without a Letterboxd
+  account.
+
+Both reuse the same cold-start + KNN/M5 engine and the same recommendation
+batch format. Anonymous requests are stateless; signed-in users keep their
+ratings in SQLite. The Quick Taste selection and criteria are documented in
+`docs/quick-taste-profile.md`.
 
 ## Data and artifacts
 

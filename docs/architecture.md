@@ -121,6 +121,7 @@ packages/recommendation-engine/
 │   └── letterboxd_import.py
 ├── scripts/
 │   ├── generate_recommendations.py
+│   ├── select_quick_taste_movies.py
 │   └── verify_export.py
 ├── tests/
 ├── artifacts/
@@ -172,9 +173,9 @@ profile -> centered similarity -> 50 neighbors -> 20 movies/neighbor
 
 `apps/backend/` is the FastAPI application. It loads the recommendation engine
 once during lifespan startup, exposes `GET /health`, `GET /api/v1/ready`,
-`POST /api/v1/recommendations/from-letterboxd?limit=100`, and the
-`/api/v1/auth/*` endpoints. Letterboxd ZIPs are validated in memory before
-reuse of the existing parser.
+`POST /api/v1/recommendations/from-letterboxd?limit=100`, the
+`/api/v1/taste-profile/*` endpoints, and the `/api/v1/auth/*` endpoints.
+Letterboxd ZIPs are validated in memory before reuse of the existing parser.
 
 Phase 1 adds a versioned SQLite schema managed by Alembic. Phase 2 adds
 accounts, optional email verification, server-side sessions, CSRF protection,
@@ -197,12 +198,24 @@ and watched films. Batch history is stored in `recommendation_batches` and
 server-backed "Get more recommendations" action at the end of a batch, with an
 explicit no-new-candidates state.
 
+Phase 7 adds the Quick Taste Profile. A frozen set of 20 movies is selected
+offline from the production ratings matrix and M5 representations, stored in
+`apps/backend/app/data/quick_taste_movies.json`, and served by
+`GET /api/v1/taste-profile/movies`. `POST /api/v1/taste-profile/recommendations`
+validates exactly 20 answers, ignores No opinion entries, requires at least 3
+ratings, and reuses the same cold-start + KNN/M5 pipeline. Anonymous requests
+stay stateless; authenticated requests save the ratings through the same
+`user_films` upsert path as Letterboxd imports. The frontend flow lives at
+`/taste-profile` and redirects to `/discover` with the existing session-storage
+batch format.
+
 TMDB image metadata is loaded from a local JSON produced by
 `apps/backend/scripts/enrich_tmdb_metadata.py`. Recommendation requests never
 call TMDB.
 
-`apps/frontend/` is a placeholder for the future Next.js application described
-in `docs/frontend.md`.
+`apps/frontend/` is the Next.js application. It uses static export and the
+same recommendation batch storage for Letterboxd imports and the Quick Taste
+Profile.
 
 ## 8. Future deployment
 
@@ -223,5 +236,5 @@ TMDB will provide image URLs. No image storage service is planned.
 | Recommendation engine | numpy, scipy |
 | Backend | fastapi, uvicorn, pydantic, recommendation engine |
 | Research | numpy, scipy, pandas, matplotlib, marimo |
-| Frontend | none yet |
+| Frontend | next, react, motion, tailwind |
 | Infrastructure | no production manifests yet |
