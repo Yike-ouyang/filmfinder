@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import Request
 
 from app.core.exceptions import APIError
+from app.services.rating_service import RatingService
 
 
 def get_engine(request: Request):
@@ -47,3 +48,9 @@ def get_batch_service(request: Request):
             "The recommendation engine is not ready.",
         )
     return service
+
+
+def get_rating_service(request: Request):
+    engine = get_engine(request)
+    profile_service = get_profile_service(request)
+    return RatingService(engine, profile_service)

@@ -330,10 +330,10 @@ export function DiscoverPageContent() {
                   Try again
                 </button>
                 <Link
-                  href="/"
+                  href="/films"
                   className="inline-flex h-11 items-center justify-center rounded-full border border-white/10 text-sm font-medium text-white/70 transition-colors hover:bg-white/5 hover:text-white"
                 >
-                  Import Letterboxd
+                  Browse films
                 </Link>
               </div>
             </div>

@@ -1,3 +1,4 @@
+import { BuildProfileCTA } from "@/components/home/BuildProfileCTA";
 import { HowItWorks } from "@/components/home/HowItWorks";
 import { LetterboxdUploader } from "@/components/home/LetterboxdUploader";
 import { TmdbAttribution } from "@/components/ui/TmdbAttribution";
@@ -56,12 +57,15 @@ export function HeroSection() {
             <LetterboxdUploader />
             <HowItWorks />
           </div>
+
+          <BuildProfileCTA />
         </div>
       </div>
 
       <footer className="safe-bottom relative z-10 mx-auto flex w-full max-w-5xl flex-col items-center gap-3 px-5 text-center sm:px-8">
         <p className="text-[11px] tracking-wide text-white/50">
-          No account required. Your archive is processed in memory.
+          Import a Letterboxd archive in memory, or create an account to build
+          your profile manually.
         </p>
         <TmdbAttribution />
       </footer>

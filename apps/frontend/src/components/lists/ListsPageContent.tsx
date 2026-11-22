@@ -18,8 +18,8 @@ import type { SwipeItem, SwipeLists } from "@/types/swipes";
 type ListTab = "interested" | "not_interested";
 
 const TABS: { key: ListTab; label: string }[] = [
-  { key: "interested", label: "Interested" },
-  { key: "not_interested", label: "Not Interested" },
+  { key: "interested", label: "Watchlist" },
+  { key: "not_interested", label: "Do Not Watch" },
 ];
 
 function ListsLoading() {
@@ -116,7 +116,7 @@ export function ListsPageContent() {
     return (
       <AuthShell
         title="My Lists"
-        description="Create an account to save the films you are interested in and the ones you want to skip."
+        description="Create an account to keep your Watchlist and Do Not Watch lists in sync with Discover and Films."
         footer={
           <>
             Questions?{" "}
@@ -164,8 +164,8 @@ export function ListsPageContent() {
           My Lists
         </h1>
         <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/50">
-          The films you saved while discovering. Changes are stored in your
-          account.
+          The films you saved while discovering or browsing the library.
+          Changes are stored in your account.
         </p>
 
         <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -237,7 +237,7 @@ export function ListsPageContent() {
                 aria-hidden="true"
                 className="h-4 w-4 animate-spin"
               />
-              Loading your {activeTab === "interested" ? "interested" : "skipped"} films...
+              Loading your {activeTab === "interested" ? "watchlist" : "Do Not Watch"} films...
             </div>
           ) : items.length === 0 ? (
             <div className="rounded-3xl border border-white/10 bg-white/[0.02] px-6 py-14 text-center">
@@ -249,7 +249,7 @@ export function ListsPageContent() {
                 No films here yet.
               </p>
               <p className="mt-2 text-xs text-white/40">
-                Swipe through Discover to build this list.
+                Swipe through Discover or add films from the library to build this list.
               </p>
               <Link
                 href="/discover"

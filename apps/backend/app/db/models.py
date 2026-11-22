@@ -1,18 +1,20 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from sqlalchemy import (
     JSON,
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     Float,
     ForeignKey,
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     text,
 )
@@ -390,3 +392,84 @@ class RecommendationItem(Base):
     )
 
     batch: Mapped["RecommendationBatch"] = relationship(back_populates="items")
+
+
+class CatalogFilm(Base):
+    __tablename__ = "catalog_films"
+    __table_args__ = (
+        UniqueConstraint("movie_id", name="uq_catalog_films_movie_id"),
+        Index("ix_catalog_films_title_normalized", "title_normalized"),
+        Index("ix_catalog_films_year", "year"),
+        Index("ix_catalog_films_release_date", "release_date"),
+        Index("ix_catalog_films_ratings_count", "ratings_count"),
+        Index("ix_catalog_films_weighted_rating", "weighted_rating"),
+        Index("ix_catalog_films_in_library", "in_library"),
+    )
+
+    internal_movie_id: Mapped[int] = mapped_column(
+        Integer, primary_key=True
+    )
+    movie_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    title_normalized: Mapped[str] = mapped_column(
+        String(512), nullable=False
+    )
+    year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    release_date: Mapped[Optional[date]] = mapped_column(
+        Date, nullable=True
+    )
+    genres: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    tmdb_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    poster_path: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True
+    )
+    backdrop_path: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True
+    )
+    ratings_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    rating_mean: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.0
+    )
+    weighted_rating: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.0
+    )
+    in_library: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    synced_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+    genre_rows: Mapped[list["CatalogFilmGenre"]] = relationship(
+        back_populates="film",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class CatalogFilmGenre(Base):
+    __tablename__ = "catalog_film_genres"
+    __table_args__ = (
+        Index("ix_catalog_film_genres_genre", "genre"),
+    )
+
+    film_id: Mapped[int] = mapped_column(
+        ForeignKey(
+            "catalog_films.internal_movie_id",
+            ondelete="CASCADE",
+        ),
+        primary_key=True,
+    )
+    genre: Mapped[str] = mapped_column(
+        String(64), primary_key=True
+    )
+
+    film: Mapped["CatalogFilm"] = relationship(
+        back_populates="genre_rows"
+    )

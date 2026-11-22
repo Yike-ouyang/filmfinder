@@ -116,10 +116,14 @@ describe("DiscoverExperience", () => {
 
   it("opens accessible details and links to TMDB", async () => {
     const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new TypeError("network unavailable")),
+    );
     render(<DiscoverExperience initialBatch={makeBatch(1)} />);
 
     await user.click(
-      screen.getByRole("button", { name: "View details for Film One" }),
+      screen.getByRole("button", { name: "More info for Film One" }),
     );
 
     const dialog = await screen.findByRole("dialog");

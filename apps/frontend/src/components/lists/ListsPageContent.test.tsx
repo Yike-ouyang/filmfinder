@@ -88,12 +88,12 @@ describe("ListsPageContent", () => {
     render(<ListsPageContent />);
 
     expect(await screen.findByText("Film One")).toBeVisible();
-    expect(screen.getByRole("tab", { name: /^Interested/ })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: /^Watchlist/ })).toHaveAttribute(
       "aria-selected",
       "true",
     );
 
-    await user.click(screen.getByRole("tab", { name: /Not Interested/ }));
+    await user.click(screen.getByRole("tab", { name: /Do Not Watch/ }));
 
     expect(screen.getByText("Film Two")).toBeVisible();
     expect(screen.queryByText("Film One")).not.toBeInTheDocument();

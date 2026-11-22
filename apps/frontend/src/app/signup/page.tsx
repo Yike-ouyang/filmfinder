@@ -11,6 +11,7 @@ import {
 } from "@/components/auth/AuthShell";
 import { errorMessage } from "@/lib/api";
 import { resendVerification, signup } from "@/lib/auth";
+import { readNextPath, rememberNextPath } from "@/lib/navigation";
 import { PASSWORD_MIN_LENGTH } from "@/lib/constants";
 import type { SignupResponse } from "@/types/auth";
 
@@ -40,6 +41,7 @@ export default function SignupPage() {
     }
     setSubmitting(true);
     try {
+      rememberNextPath(readNextPath());
       setResult(await signup(email, password));
     } catch (submitError) {
       setError(errorMessage(submitError));
@@ -115,7 +117,7 @@ export default function SignupPage() {
   return (
     <AuthShell
       title="Create your account"
-      description="Save your Letterboxd profile, preferences, and recommendations across visits."
+      description="Save your ratings, lists, and recommendations across visits."
       footer={
         <>
           Already have an account?{" "}
@@ -164,8 +166,8 @@ export default function SignupPage() {
         </AuthSubmit>
       </form>
       <p className="mt-5 text-center text-[11px] leading-relaxed text-white/40">
-        We will never store your Letterboxd archive. Only your imported
-        ratings and preferences are saved.
+        We never store your Letterboxd archive. Only your saved ratings and
+        preferences are stored.
       </p>
     </AuthShell>
   );

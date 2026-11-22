@@ -5,6 +5,7 @@ import csv
 import json
 import os
 import re
+import sys
 import time
 from pathlib import Path
 
@@ -12,6 +13,16 @@ import httpx
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from app.services.catalogue_source import (  # noqa: E402
+    build_catalogue_index as _catalogue_index,
+    detect_column as _detect_column,
+    field_value as _field,
+    load_catalogue as _load_catalogue,
+    match_internal as _match_internal,
+)
 REPO_ROOT = BACKEND_ROOT.parents[1]
 DEFAULT_ARTIFACTS = REPO_ROOT / "packages" / "recommendation-engine" / "artifacts"
 DEFAULT_OUTPUT = DEFAULT_ARTIFACTS / "tmdb_metadata.json"
@@ -46,41 +57,6 @@ def _api_key(explicit):
     return None
 
 
-def _load_catalogue(path):
-    payload = json.loads(Path(path).read_text())
-    movies = payload.get("movies") if isinstance(payload, dict) else payload
-    if not movies:
-        raise ValueError(f"No movies found in {path}")
-    return list(movies)
-
-
-def _catalogue_index(movies):
-    by_source = {}
-    by_movie_id = {}
-    for movie in movies:
-        internal = int(movie["internal_id"])
-        movie_id = movie.get("movie_id")
-        if movie_id is not None:
-            by_movie_id[str(movie_id)] = internal
-        for value in (movie.get("source_ids") or {}).values():
-            if value is not None:
-                by_source[str(value)] = internal
-    return by_source, by_movie_id
-
-
-def _field(row, name):
-    if name is None:
-        return None
-    return row.get(name)
-
-
-def _detect_column(fieldnames, candidates):
-    for candidate in candidates:
-        if candidate in fieldnames:
-            return candidate
-    return None
-
-
 def _parse_tmdb_id(row, id_column, link_column):
     if id_column:
         raw = _field(row, id_column)
@@ -100,21 +76,6 @@ def _parse_tmdb_id(row, id_column, link_column):
         match = TMDB_URL_RE.search(str(value))
         if match:
             return int(match.group(1))
-    return None
-
-
-def _match_internal(row, by_source, by_movie_id, id_column, movie_column):
-    for column in (id_column, movie_column):
-        if column is None:
-            continue
-        value = _field(row, column)
-        if value is None:
-            continue
-        key = str(value)
-        if key in by_source:
-            return by_source[key]
-        if key in by_movie_id:
-            return by_movie_id[key]
     return None
 
 

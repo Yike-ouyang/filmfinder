@@ -143,11 +143,11 @@ export function MovieCard({
           onClick={onOpenDetails}
           onPointerDown={(event) => event.stopPropagation()}
           aria-haspopup="dialog"
-          aria-label={`View details for ${recommendation.title}`}
+          aria-label={`More info for ${recommendation.title}`}
           className="absolute bottom-3 right-3 inline-flex h-8 items-center gap-1.5 rounded-full border border-white/10 bg-black/60 px-3 text-[11px] font-medium text-white/70 backdrop-blur-md transition-colors hover:bg-white/15 hover:text-white"
         >
           <Info aria-hidden="true" className="h-3.5 w-3.5" />
-          Details
+          More Info
         </button>
       </div>
 

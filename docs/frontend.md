@@ -1,3 +1,7 @@
+> Historical design brief. The current application also includes `/films`,
+> account pages, My Lists and the manual profile flow. See
+> `docs/film-library.md` and `apps/frontend/README.md`.
+
 # FILMFINDER — Build a Cinematic Movie Discovery Website
 
 ## 1. Project Overview

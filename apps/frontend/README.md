@@ -1,8 +1,8 @@
 # FilmFinder frontend
 
-Cinematic Next.js frontend for FilmFinder. Import a Letterboxd ZIP export,
-let the existing FastAPI recommendation backend analyze the profile, then
-discover the results through a swipe-based interface.
+Cinematic Next.js frontend for FilmFinder. Import a Letterboxd ZIP export or
+build a profile manually from the `/films` library, then discover the results
+through a swipe-based interface.
 
 ## Stack
 
@@ -59,12 +59,16 @@ after changing them. No TMDB token is used by the frontend.
 ## Routes
 
 ```text
-/           Letterboxd ZIP import and cinematic landing page
-/discover   Swipe-based recommendation discovery
+/               Letterboxd import and manual-profile entry point
+/films          Browsable catalogue, search, filters and star ratings
+/discover       Swipe-based recommendation discovery
+/lists          Watchlist and Do Not Watch
+/login /signup  Account authentication
 ```
 
-The floating navigation links both routes. Opening `/discover` without a
-saved session shows an import prompt instead of empty cards.
+The floating navigation links Home, Films, Discover and My Lists. Opening
+`/discover` without a saved session shows an import / library prompt instead of
+empty cards.
 
 ## Backend integration
 
@@ -72,12 +76,19 @@ The frontend calls:
 
 ```http
 POST /api/v1/recommendations/from-letterboxd?limit=100
-Content-Type: multipart/form-data
+GET  /api/v1/films
+GET  /api/v1/films/facets
+GET  /api/v1/films/{film_id}
+GET  /api/v1/me/profile-summary
+PUT  /api/v1/me/ratings/{film_id}
+DELETE /api/v1/me/ratings/{film_id}
+POST /api/v1/recommendations/from-saved-ratings
 ```
 
-The multipart field is named `file`. The request is sent once per import and
-the recommendation batch is reused during swiping. Swipes never call the
-backend.
+The multipart field is named `file`. The import request is sent once and the
+recommendation batch is reused during swiping. The `/films` page uses SQL
+pagination, search, genre filtering and sorting. Signed-in actions send the
+session and CSRF cookies. Manual generation requires 10 ratings.
 
 The implementation is adapted to the real backend schema:
 
@@ -99,14 +110,15 @@ Known backend error codes handled by the client include `invalid_zip`,
 
 ## Local state and privacy
 
-- Only the current recommendation batch, its profile summary, and local swipe
+- The current recommendation batch, its profile summary, and local swipe
   decisions are stored in `sessionStorage`.
 - The ZIP file is never stored in browser storage.
-- Raw Letterboxd ratings are never stored in the browser.
-- The session expires after 24 hours and is cleared when starting a new
-  import from the end screen.
-- There are no accounts, cookies, database writes, or server-side sessions.
-- The frontend does not send swipe feedback to the backend.
+- Anonymous Letterboxd ratings are processed in memory. Signed-in imports,
+  manual ratings, Watchlist and Do Not Watch decisions are stored in SQLite.
+- Session cookies and CSRF cookies are used for authenticated API requests.
+- Film ratings and list actions require an account. Anonymous visitors can
+  browse `/films` and open details but see a Create account / Log in prompt
+  before saving anything.
 
 ## TMDB images
 
@@ -154,9 +166,11 @@ The suite covers:
 
 ## Known limitations
 
-- The app is a stateless proof of concept: no authentication, accounts,
-  recommendation history, or database.
 - Recommendation sessions are per browser tab and expire after 24 hours.
+- The `/films` catalogue requires the SQLite catalogue synchronization
+  described in `docs/film-library.md`.
+- The catalogue's current temporal limit is 2019; later films can still appear
+  in Discover but not in the library list.
 - The backend must be running and CORS must allow the frontend origin.
 - The client-side upload limit must match the backend limit; the backend
   remains the source of truth.

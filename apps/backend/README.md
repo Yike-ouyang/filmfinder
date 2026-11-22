@@ -46,7 +46,15 @@ returns HTTP 503.
 GET /health
 GET /api/v1/ready
 POST /api/v1/recommendations/from-letterboxd?limit=100
+POST /api/v1/recommendations/from-saved-ratings
 GET /api/v1/recommendations/current
+GET /api/v1/films
+GET /api/v1/films/facets
+GET /api/v1/films/{film_id}
+GET /api/v1/me/ratings
+PUT /api/v1/me/ratings/{film_id}
+DELETE /api/v1/me/ratings/{film_id}
+GET /api/v1/me/profile-summary
 POST /api/v1/recommendations/refresh
 GET /api/v1/auth/csrf
 POST /api/v1/auth/signup
@@ -109,6 +117,39 @@ unchanged and never write to SQLite. Raw ZIP archives are never stored.
 The response contains `profile`, `recommendation_info`, and
 `recommendations`. Fields `poster_path`, `backdrop_path`, and `tmdb_id` are
 `null` when TMDB metadata is unavailable.
+
+## Film library
+
+The browsable catalogue is stored in SQLite in `catalog_films` and
+`catalog_film_genres` (migration `0002_catalog_films`). Synchronize it offline:
+
+```bash
+alembic -c apps/backend/alembic.ini upgrade head
+python apps/backend/scripts/sync_film_catalog.py \
+  --catalogue-csv movie_data.csv \
+  --artifacts packages/recommendation-engine/artifacts
+```
+
+`movie_data.csv` is the raw 163 MB source and is not versioned. The script
+streams it, reuses the stable `_id` / `movie_id` matching, and writes summaries,
+precise release dates, TMDB image paths and rating metrics. It never calls
+TMDB. The library filters on `in_library = year <= 2019`; 38 705 films qualify
+from the current artifacts.
+
+`GET /api/v1/films` uses SQL pagination (50 max), search, genre filtering and
+popularity/weighted-rating/date sorting. `GET /api/v1/films/{film_id}` serves
+the summary. Both accept an optional session and include personal rating/list
+state when signed in.
+
+Manual ratings are integers 1-10. `PUT` creates or replaces a rating and clears
+the film's Watchlist / Do Not Watch decision. `DELETE` removes the entire
+`user_films` row, as required by the manual profile flow. Manual generation uses
+`POST /api/v1/recommendations/from-saved-ratings`, which enforces 10 ratings;
+the existing Letterboxd import and `/recommendations/refresh` are unchanged.
+
+Watchlist and Do Not Watch reuse `user_swipes`: `interested` and
+`not_interested`. Discover and My Lists use the same rows, so there is one
+source of truth for list decisions. See `docs/film-library.md`.
 
 ## TMDB metadata enrichment
 
@@ -259,12 +300,15 @@ python -m pytest -q apps/backend/tests
 
 Tests cover health, readiness, valid/invalid ZIP uploads, limit and size
 validation, no matched ratings, watched exclusion, determinism, metadata
-lookup, mocked TMDB enrichment, authentication, profile persistence, swipe
-history/undo, recommendation batches, exclusions, and SQLite backups. No real TMDB requests are made by tests.
+lookup, mocked TMDB enrichment, catalogue synchronization, library pagination
+and search, manual ratings, list coherence, authentication, profile
+persistence, swipe history/undo, recommendation batches, exclusions, and SQLite
+backups. No real TMDB requests are made by tests.
 
 ## Design boundaries
 
-The public recommendation API remains usable without an account. SQLite backs
-accounts, sessions, Letterboxd profiles, swipes, and recommendation history.
-The API does not create tables at startup, does not retrain models, and does
-not depend on an external database server.
+The public film and recommendation APIs remain usable without an account.
+SQLite backs accounts, sessions, Letterboxd profiles, manual ratings, list
+decisions, recommendation history, and the derived film catalogue. The API
+does not create tables at startup, does not retrain models, and does not depend
+on an external database server.

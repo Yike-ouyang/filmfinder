@@ -9,22 +9,22 @@ const copy: Record<
 > = {
   missing: {
     title: "No discoveries yet.",
-    body: "Import your Letterboxd export to start a personalized session.",
+    body: "Import your Letterboxd export, or rate films in the library, to start a personalized session.",
     icon: Film,
   },
   expired: {
     title: "Your discovery session expired.",
-    body: "Recommendations are kept in this browser for 24 hours. Import your profile again to start a new session.",
+    body: "Recommendations are kept in this browser for 24 hours. Start a new session from your ratings or Letterboxd import.",
     icon: Clock,
   },
   invalid: {
     title: "This session could not be restored.",
-    body: "The saved recommendation batch was incomplete or damaged. Start a fresh import.",
+    body: "The saved recommendation batch was incomplete or damaged. Start a fresh session.",
     icon: TriangleAlert,
   },
   unavailable: {
     title: "Session storage is unavailable.",
-    body: "This browser is blocking local session storage. Allow it for FilmFinder, then import your profile.",
+    body: "This browser is blocking local session storage. Allow it for FilmFinder, then try again.",
     icon: HardDrive,
   },
 };
@@ -61,12 +61,20 @@ export function EmptyDiscovery({
           <p className="mt-4 text-balance text-sm leading-relaxed text-white/55">
             {content.body}
           </p>
-          <Link
-            href="/"
-            className="mt-8 inline-flex h-11 items-center justify-center rounded-full bg-white px-6 text-sm font-medium text-black transition-opacity hover:opacity-90"
-          >
-            Import Letterboxd
-          </Link>
+          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+            <Link
+              href="/"
+              className="inline-flex h-11 items-center justify-center rounded-full bg-white px-6 text-sm font-medium text-black transition-opacity hover:opacity-90"
+            >
+              Import Letterboxd
+            </Link>
+            <Link
+              href="/films"
+              className="inline-flex h-11 items-center justify-center rounded-full border border-white/10 px-6 text-sm font-medium text-white/70 transition-colors hover:bg-white/5 hover:text-white"
+            >
+              Browse films
+            </Link>
+          </div>
         </div>
       </div>
       <footer className="safe-bottom relative z-10 px-6 text-center">
