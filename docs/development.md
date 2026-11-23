@@ -91,6 +91,19 @@ curl -X POST \
   -F "file=@packages/recommendation-engine/tests/fixtures/letterboxd-eslpej-2026-11-20-10-33-utc.zip"
 ```
 
+Film catalogue synchronization:
+
+```bash
+alembic -c apps/backend/alembic.ini upgrade head
+python apps/backend/scripts/sync_film_catalog.py \
+  --catalogue-csv movie_data.csv \
+  --artifacts packages/recommendation-engine/artifacts
+```
+
+The script reads the gitignored `movie_data.csv` and writes the SQLite
+catalogue used by `/films`. Use `--dry-run` or `--limit` for inspection. See
+`docs/film-library.md`.
+
 Offline TMDB enrichment:
 
 ```bash

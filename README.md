@@ -2,15 +2,15 @@
 
 Film recommendation system based on a contextual Factorization Machine (M5)
 and a KNN candidate generator. The repository is organized as a monorepo for
-research, the production recommendation engine, and the future web application.
+research, the production recommendation engine, and the web application.
 
 ## Repository layout
 
 ```text
 .
 ├── apps/
-│   ├── backend/                 # minimal FastAPI scaffold
-│   └── frontend/                # future Next.js application (placeholder)
+│   ├── backend/                 # FastAPI API, SQLite, catalogue and recommendations
+│   └── frontend/                # Next.js static-export application
 ├── packages/
 │   └── recommendation-engine/   # installable inference package
 ├── research/
@@ -20,11 +20,12 @@ research, the production recommendation engine, and the future web application.
 │   ├── explorer/                # marimo recommendation explorer
 │   ├── legacy/                  # early SVD experiments
 │   └── results/                 # generated experimental outputs (ignored)
-├── infrastructure/              # future Docker/Caddy/PostgreSQL setup
+├── infrastructure/              # Caddy / systemd deployment notes
 ├── docs/
 │   ├── architecture.md
 │   ├── development.md
 │   ├── deployment.md
+│   ├── film-library.md
 │   ├── repository-migration.md
 │   └── frontend.md
 ├── prompts/                     # task specifications
@@ -32,6 +33,17 @@ research, the production recommendation engine, and the future web application.
 ├── README.md
 └── pyproject.toml
 ```
+
+## Web application
+
+The frontend offers two ways to build a profile:
+
+- import a Letterboxd ZIP export;
+- browse `/films` and rate catalogue films manually.
+
+Both use the same cold-start + KNN/M5 engine. The browsable library is backed
+by a SQLite catalogue synchronized from `movie_data.csv` and the production
+artifacts. See `docs/film-library.md`.
 
 ## Data and artifacts
 

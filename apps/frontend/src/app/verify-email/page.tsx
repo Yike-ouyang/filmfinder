@@ -49,7 +49,7 @@ function VerifyEmailContent() {
       }
       description={
         displayState === "success"
-          ? "Your account is active. You can now sign in and import your Letterboxd profile."
+          ? "Your account is active. You can now sign in and build your movie profile."
           : displayState === "error"
             ? "The link may have expired or already been used."
             : "This only takes a moment."

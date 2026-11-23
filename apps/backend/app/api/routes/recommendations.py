@@ -71,10 +71,47 @@ def refresh_recommendations(
         raise APIError(
             422,
             "no_saved_profile",
-            "Import a Letterboxd profile before requesting recommendations.",
+            "Save some film ratings before requesting recommendations.",
         )
     if status == "no_new_candidates":
         return RefreshResponse(status="no_new_candidates")
+    if status == "unavailable":
+        raise APIError(
+            503,
+            "engine_unavailable",
+            "The recommendation engine is not ready.",
+        )
+    response.status_code = 202
+    return RefreshResponse(status="pending")
+
+
+@router.post(
+    "/from-saved-ratings",
+    response_model=RefreshResponse,
+    dependencies=[Depends(require_session_csrf)],
+)
+def recommend_from_saved_ratings(
+    response: Response,
+    record: UserSession = Depends(get_current_session),
+    batch_service=Depends(get_batch_service),
+):
+    status = batch_service.request_generation(
+        record.user.id,
+        reason="manual",
+        min_ratings=10,
+    )
+    if status == "no_profile":
+        raise APIError(
+            422,
+            "no_saved_profile",
+            "Rate at least 10 films before requesting recommendations.",
+        )
+    if status == "insufficient_ratings":
+        raise APIError(
+            422,
+            "insufficient_ratings",
+            "Rate at least 10 films before requesting recommendations.",
+        )
     if status == "unavailable":
         raise APIError(
             503,

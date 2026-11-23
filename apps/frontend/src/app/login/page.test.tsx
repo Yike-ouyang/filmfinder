@@ -29,6 +29,8 @@ vi.mock("@/lib/auth", () => ({
 beforeEach(() => {
   navigation.push.mockReset();
   auth.signIn.mockReset();
+  window.history.replaceState({}, "", "/login");
+  window.sessionStorage.clear();
 });
 
 describe("LoginPage", () => {
@@ -53,6 +55,24 @@ describe("LoginPage", () => {
       ),
     );
     expect(navigation.push).toHaveBeenCalledWith("/discover");
+  });
+
+  it("honours a safe next path after signing in", async () => {
+    const user = userEvent.setup();
+    auth.signIn.mockResolvedValue({
+      id: 1,
+      email: "user@example.com",
+      email_verified: true,
+      created_at: "2026-11-21T10:00:00Z",
+    });
+    window.history.replaceState({}, "", "/login?next=%2Ffilms");
+    render(<LoginPage />);
+    await user.type(screen.getByLabelText("Email"), "user@example.com");
+    await user.type(screen.getByLabelText("Password"), "correct horse battery");
+    await user.click(screen.getByRole("button", { name: "Log in" }));
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith("/films"),
+    );
   });
 
   it("offers a resend action when the email is not verified", async () => {

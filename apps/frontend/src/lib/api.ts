@@ -66,7 +66,16 @@ const ERROR_MESSAGES: Record<string, string> = {
   generation_failed:
     "Recommendations could not be generated. Try again or import a profile.",
   no_saved_profile:
-    "Import a Letterboxd profile before requesting recommendations.",
+    "Save some film ratings before requesting recommendations.",
+  insufficient_ratings:
+    "Rate at least 10 films before generating recommendations.",
+  catalog_unavailable:
+    "The film catalogue is not ready yet. Try again in a moment.",
+  film_not_found:
+    "This film is not in the FilmFinder catalogue.",
+  rating_not_found: "No rating exists for this film.",
+  rating_persistence_failed:
+    "Your rating could not be saved. Try again in a moment.",
   backend_unavailable:
     "Cannot reach the FilmFinder backend. Make sure it is running and try again.",
   backend_error:

@@ -341,3 +341,23 @@ def test_no_profile_prevents_generation(batch_env):
 
     assert service.request_generation(user_id) == "no_profile"
     assert service.current(user_id)["status"] == "empty"
+
+
+def test_manual_generation_requires_ten_ratings(batch_env):
+    session_factory, user_id = batch_env
+    service = _service(
+        session_factory,
+        profile=SavedProfile(
+            ratings={str(index): 8.0 for index in range(9)},
+            watched_movie_ids={str(index) for index in range(9)},
+            ratings_count=9,
+            watched_count=9,
+        ),
+    )
+
+    assert (
+        service.request_generation(
+            user_id, reason="manual", min_ratings=10
+        )
+        == "insufficient_ratings"
+    )

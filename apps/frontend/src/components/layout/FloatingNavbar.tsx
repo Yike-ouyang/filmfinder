@@ -8,7 +8,7 @@ import { cn } from "@/lib/cn";
 import { SITE_NAME } from "@/lib/constants";
 
 const links = [
-  { href: "/", label: "Home" },
+  { href: "/films", label: "Films" },
   { href: "/discover", label: "Discover" },
   { href: "/lists", label: "My Lists" },
 ];

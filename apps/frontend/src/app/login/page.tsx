@@ -13,6 +13,11 @@ import {
 import { useAuth } from "@/components/auth/AuthProvider";
 import { ApiError, errorMessage } from "@/lib/api";
 import { resendVerification } from "@/lib/auth";
+import {
+  consumeStoredNextPath,
+  readNextPath,
+  safeNextPath,
+} from "@/lib/navigation";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -33,7 +38,9 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await signIn(email, password);
-      router.push("/discover");
+      const next =
+        safeNextPath(readNextPath()) ?? consumeStoredNextPath();
+      router.push(next ?? "/discover");
     } catch (loginError) {
       if (
         loginError instanceof ApiError &&

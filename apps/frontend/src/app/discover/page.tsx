@@ -4,7 +4,7 @@ import { DiscoverPageContent } from "@/components/discover/DiscoverPageContent";
 export const metadata: Metadata = {
   title: "Discover",
   description:
-    "Swipe through personalized film recommendations generated from your Letterboxd taste.",
+    "Swipe through personalized film recommendations generated from your taste profile.",
 };
 
 export default function DiscoverPage() {

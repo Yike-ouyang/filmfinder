@@ -84,7 +84,7 @@ export function DiscoveryComplete({
         You&apos;ve reached the end of these discoveries.
       </h2>
       <p className="mt-4 text-sm text-white/55">
-        Keep going with a fresh set, or import an updated Letterboxd profile.
+        Keep going with a fresh set, or update your ratings in the library.
       </p>
 
       <dl className="mt-6 grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-white/[0.02] px-2 py-4">

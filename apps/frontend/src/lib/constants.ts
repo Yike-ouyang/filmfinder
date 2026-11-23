@@ -4,6 +4,9 @@ export const SITE_DESCRIPTION =
   "Import your Letterboxd history. Discover movies made for your taste.";
 
 export const RECOMMENDATION_LIMIT = 100;
+export const FILMS_PAGE_SIZE = 50;
+export const FILM_CATALOG_YEAR_LIMIT = 2019;
+export const RECOMMENDED_MIN_RATINGS = 10;
 export const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 export const UPLOAD_TIMEOUT_MS = 180_000;
 

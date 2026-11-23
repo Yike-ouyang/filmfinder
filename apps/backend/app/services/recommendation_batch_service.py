@@ -46,7 +46,13 @@ class RecommendationBatchService:
         if shutdown is not None:
             shutdown(wait=False, cancel_futures=True)
 
-    def request_generation(self, user_id: int, *, reason: str = "login") -> str:
+    def request_generation(
+        self,
+        user_id: int,
+        *,
+        reason: str = "login",
+        min_ratings: int = 0,
+    ) -> str:
         batch_id = None
         with self.session_factory() as session:
             active = self._active_batch(session, user_id)
@@ -55,6 +61,8 @@ class RecommendationBatchService:
             profile = self.profile_service.load_profile(session, user_id)
             if not profile.ratings:
                 return "no_profile"
+            if profile.ratings_count < int(min_ratings):
+                return "insufficient_ratings"
             batch = RecommendationBatch(
                 user_id=user_id,
                 status="pending",

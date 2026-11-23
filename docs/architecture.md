@@ -42,6 +42,17 @@ packages/recommendation-engine/artifacts/
 Production artifacts are loaded from an explicit path or
 `FILMFINDER_ARTIFACTS_DIR`.
 
+The browsable film catalogue is derived into SQLite by
+`apps/backend/scripts/sync_film_catalog.py`:
+
+```text
+catalog_films          browsable metadata, summaries, ratings metrics
+catalog_film_genres    normalized genre relation for filters and facets
+```
+
+The raw source is `movie_data.csv` (gitignored). The catalogue is queried with
+SQL pagination and never loaded wholesale into the API process.
+
 ## 3. Research pipeline
 
 ```text
@@ -172,9 +183,9 @@ profile -> centered similarity -> 50 neighbors -> 20 movies/neighbor
 
 `apps/backend/` is the FastAPI application. It loads the recommendation engine
 once during lifespan startup, exposes `GET /health`, `GET /api/v1/ready`,
-`POST /api/v1/recommendations/from-letterboxd?limit=100`, and the
-`/api/v1/auth/*` endpoints. Letterboxd ZIPs are validated in memory before
-reuse of the existing parser.
+`POST /api/v1/recommendations/from-letterboxd?limit=100`, the
+`/api/v1/films/*`, `/api/v1/me/*`, and `/api/v1/auth/*` endpoints. Letterboxd
+ZIPs are validated in memory before reuse of the existing parser.
 
 Phase 1 adds a versioned SQLite schema managed by Alembic. Phase 2 adds
 accounts, optional email verification, server-side sessions, CSRF protection,
@@ -197,12 +208,21 @@ and watched films. Batch history is stored in `recommendation_batches` and
 server-backed "Get more recommendations" action at the end of a batch, with an
 explicit no-new-candidates state.
 
+Phase 7 adds the browsable film library and manual profile. A
+`catalog_films` table is synchronized offline from `movie_data.csv` and the
+production artifacts. `/api/v1/films` provides SQL pagination, search, genre
+filters and popularity/rating/date sorting. Signed-in users rate films through
+`/api/v1/me/ratings` and reuse `user_swipes` for Watchlist / Do Not Watch.
+Manual generation enforces 10 ratings and reuses the existing cold-start +
+KNN/M5 batch pipeline. See `docs/film-library.md`.
+
 TMDB image metadata is loaded from a local JSON produced by
 `apps/backend/scripts/enrich_tmdb_metadata.py`. Recommendation requests never
 call TMDB.
 
-`apps/frontend/` is a placeholder for the future Next.js application described
-in `docs/frontend.md`.
+`apps/frontend/` is the Next.js application. It uses static export and exposes
+`/films` for the catalogue and manual profile, alongside `/discover`, `/lists`
+and the account pages.
 
 ## 8. Future deployment
 
@@ -211,7 +231,7 @@ Caddy
   ├── Next.js
   └── FastAPI
         ├── FilmFinder recommendation engine
-        └── PostgreSQL
+        └── SQLite
 ```
 
 TMDB will provide image URLs. No image storage service is planned.

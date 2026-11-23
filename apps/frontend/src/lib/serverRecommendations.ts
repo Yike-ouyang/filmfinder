@@ -70,3 +70,19 @@ export async function requestRecommendationRefresh(): Promise<RefreshStatus> {
   }
   return payload.status;
 }
+
+
+export async function requestManualRecommendationGeneration(): Promise<RefreshStatus> {
+  const payload = await authenticatedRequest(
+    "/api/v1/recommendations/from-saved-ratings",
+    { method: "POST" },
+  );
+  if (
+    !isRecord(payload) ||
+    (payload.status !== "pending" &&
+      payload.status !== "no_new_candidates")
+  ) {
+    throw new ApiError("invalid_response", 200);
+  }
+  return payload.status;
+}

@@ -32,6 +32,10 @@ Working directory:
 The backend uses a single worker and a single background recommendation
 executor. ML inference is serialized by the existing semaphore.
 
+Caddy must only serve `apps/frontend/out` as static files and proxy `/api/*`
+and `/health` to FastAPI. Never expose `apps/backend/var`, `movie_data.csv`, or
+`packages/recommendation-engine/artifacts` through a static file route.
+
 ## Production environment
 
 ```env
@@ -60,6 +64,26 @@ cd /home/filmfinder/filmfinder
 
 Migrations are never applied automatically at application startup. Stop the
 service before a major migration, then restart it after `upgrade head`.
+
+## Film catalogue
+
+The `/films` library reads from the `catalog_films` and `catalog_film_genres`
+tables created by `0002_catalog_films`. Synchronize them after migrating:
+
+```bash
+cd /home/filmfinder/filmfinder
+.venv/bin/python apps/backend/scripts/sync_film_catalog.py \
+  --catalogue-csv movie_data.csv \
+  --artifacts packages/recommendation-engine/artifacts
+```
+
+`movie_data.csv` is not versioned. Copy it to the VPS temporarily for the
+sync, or import a dump of the two catalogue tables generated from a local
+sync. The script is idempotent and streams the CSV; it does not call TMDB. Use
+`--dry-run` first to inspect the report.
+
+If the catalogue tables are empty, `/api/v1/films` returns
+`catalog_unavailable` (HTTP 503). The rest of the API remains available.
 
 ## Backups
 
@@ -103,6 +127,7 @@ routes are introduced.
 curl --fail-with-body https://filmfinder.example/health
 curl --fail-with-body https://filmfinder.example/api/v1/ready
 curl -o /dev/null -w '%{http_code}\n' https://filmfinder.example/login
+curl --fail-with-body "https://filmfinder.example/api/v1/films?page=1&page_size=5"
 sudo systemctl status filmfinder-api
 sudo journalctl -u filmfinder-api -n 50 --no-pager
 ```

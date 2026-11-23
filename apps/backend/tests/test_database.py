@@ -33,6 +33,8 @@ EXPECTED_TABLES = {
     "user_swipe_events",
     "recommendation_batches",
     "recommendation_items",
+    "catalog_films",
+    "catalog_film_genres",
 }
 
 
