@@ -55,6 +55,10 @@ GET /api/v1/me/ratings
 PUT /api/v1/me/ratings/{film_id}
 DELETE /api/v1/me/ratings/{film_id}
 GET /api/v1/me/profile-summary
+GET /api/v1/admin/overview
+GET /api/v1/admin/activity?period=7d|30d|all
+GET /api/v1/admin/users?page=1&page_size=50&search=
+GET /api/v1/admin/users/{user_id}
 POST /api/v1/recommendations/refresh
 GET /api/v1/auth/csrf
 POST /api/v1/auth/signup
@@ -150,6 +154,30 @@ the existing Letterboxd import and `/recommendations/refresh` are unchanged.
 Watchlist and Do Not Watch reuse `user_swipes`: `interested` and
 `not_interested`. Discover and My Lists use the same rows, so there is one
 source of truth for list decisions. See `docs/film-library.md`.
+
+## Admin dashboard
+
+`users.is_admin` is added by migration `0003_admin_dashboard`. Assign the role
+from the server shell only:
+
+```bash
+python apps/backend/scripts/grant_admin.py --email admin@example.com
+```
+
+All `/api/v1/admin/*` endpoints require an authenticated administrator:
+anonymous requests receive 401, ordinary accounts 403. They are read-only and
+never expose password hashes, sessions, tokens or IP addresses.
+
+The overview derives registrations from `users.created_at`, logins from
+`sessions.created_at`, recommendation generations from ready
+`recommendation_batches`, ratings/lists from their current tables, and imports
+from `analytics_events`. Active users are distinct users with a successful
+login in the period. Import events are recorded after a successful
+Letterboxd import, including anonymous imports; historical imports before
+tracking are not invented. Events are pruned after 365 days by
+`apps/backend/scripts/prune_analytics.py`.
+
+See `docs/admin-dashboard.md` for exact metric definitions.
 
 ## TMDB metadata enrichment
 
@@ -303,12 +331,14 @@ validation, no matched ratings, watched exclusion, determinism, metadata
 lookup, mocked TMDB enrichment, catalogue synchronization, library pagination
 and search, manual ratings, list coherence, authentication, profile
 persistence, swipe history/undo, recommendation batches, exclusions, and SQLite
-backups. No real TMDB requests are made by tests.
+backups, admin authorization, metric aggregation, temporal filters, user
+privacy and analytics retention. No real TMDB requests are made by tests.
 
 ## Design boundaries
 
 The public film and recommendation APIs remain usable without an account.
 SQLite backs accounts, sessions, Letterboxd profiles, manual ratings, list
-decisions, recommendation history, and the derived film catalogue. The API
+decisions, recommendation history, the derived film catalogue, and the small
+import-event log. Administrator access is enforced server-side. The API
 does not create tables at startup, does not retrain models, and does not depend
 on an external database server.

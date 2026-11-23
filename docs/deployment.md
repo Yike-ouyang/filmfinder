@@ -47,6 +47,7 @@ BREVO_API_KEY=...
 EMAIL_FROM=verified-sender@example.com
 FILMFINDER_DB_PATH=/var/lib/filmfinder/filmfinder.db
 REQUIRE_EMAIL_VERIFICATION=false
+ANALYTICS_RETENTION_DAYS=365
 ```
 
 `CORS_ORIGINS` must contain the exact frontend origin because the CSRF check
@@ -64,6 +65,34 @@ cd /home/filmfinder/filmfinder
 
 Migrations are never applied automatically at application startup. Stop the
 service before a major migration, then restart it after `upgrade head`.
+
+## Administrator access
+
+Create or use an existing account, then grant the administrator role from the
+server shell:
+
+```bash
+cd /home/filmfinder/filmfinder
+.venv/bin/python apps/backend/scripts/grant_admin.py \
+  --email admin@example.com
+```
+
+Revoke with `--revoke`. There is no public endpoint for changing this role.
+The `/admin` page remains inaccessible until this command is run.
+
+## Analytics retention
+
+Only Letterboxd import events are stored in `analytics_events`. Prune them after
+the retention window:
+
+```bash
+.venv/bin/python apps/backend/scripts/prune_analytics.py \
+  --retention-days 365
+```
+
+This can run from a systemd timer, like the SQLite backup timer. It does not
+create a permanent service and does not affect registrations, sessions,
+recommendation batches, ratings or list data.
 
 ## Film catalogue
 
@@ -128,6 +157,7 @@ curl --fail-with-body https://filmfinder.example/health
 curl --fail-with-body https://filmfinder.example/api/v1/ready
 curl -o /dev/null -w '%{http_code}\n' https://filmfinder.example/login
 curl --fail-with-body "https://filmfinder.example/api/v1/films?page=1&page_size=5"
+curl -o /dev/null -w '%{http_code}\n' https://filmfinder.example/admin
 sudo systemctl status filmfinder-api
 sudo journalctl -u filmfinder-api -n 50 --no-pager
 ```

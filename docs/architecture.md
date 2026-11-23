@@ -184,8 +184,9 @@ profile -> centered similarity -> 50 neighbors -> 20 movies/neighbor
 `apps/backend/` is the FastAPI application. It loads the recommendation engine
 once during lifespan startup, exposes `GET /health`, `GET /api/v1/ready`,
 `POST /api/v1/recommendations/from-letterboxd?limit=100`, the
-`/api/v1/films/*`, `/api/v1/me/*`, and `/api/v1/auth/*` endpoints. Letterboxd
-ZIPs are validated in memory before reuse of the existing parser.
+`/api/v1/films/*`, `/api/v1/me/*`, `/api/v1/admin/*`, and the
+`/api/v1/auth/*` endpoints. Letterboxd ZIPs are validated in memory before
+reuse of the existing parser.
 
 Phase 1 adds a versioned SQLite schema managed by Alembic. Phase 2 adds
 accounts, optional email verification, server-side sessions, CSRF protection,
@@ -216,13 +217,22 @@ filters and popularity/rating/date sorting. Signed-in users rate films through
 Manual generation enforces 10 ratings and reuses the existing cold-start +
 KNN/M5 batch pipeline. See `docs/film-library.md`.
 
+Phase 8 adds the private admin dashboard. `users.is_admin` is assigned only by
+the `grant_admin.py` shell script. `/api/v1/admin/*` endpoints are protected by
+`get_current_admin` and expose aggregate account, login, recommendation,
+rating and list metrics. `analytics_events` stores only Letterboxd import
+events; registrations, logins, recommendations, ratings and lists are derived
+from existing tables. Active users are defined as distinct users with a
+successful login in the period. The frontend `/admin` page uses native SVG
+charts. See `docs/admin-dashboard.md`.
+
 TMDB image metadata is loaded from a local JSON produced by
 `apps/backend/scripts/enrich_tmdb_metadata.py`. Recommendation requests never
 call TMDB.
 
 `apps/frontend/` is the Next.js application. It uses static export and exposes
-`/films` for the catalogue and manual profile, alongside `/discover`, `/lists`
-and the account pages.
+`/films` for the catalogue and manual profile, `/discover`, `/lists`, the
+account pages, and the private `/admin` dashboard.
 
 ## 8. Future deployment
 

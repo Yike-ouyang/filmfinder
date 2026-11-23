@@ -3,7 +3,15 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import APIError
@@ -124,6 +132,7 @@ def recommend_from_saved_ratings(
 
 @router.post("/from-letterboxd", response_model=RecommendationResponse)
 def recommend_from_letterboxd(
+    request: Request,
     file: UploadFile = File(...),
     limit: int = Query(default=100, ge=1, le=100),
     record: Optional[UserSession] = Depends(get_optional_session),
@@ -163,5 +172,17 @@ def recommend_from_letterboxd(
         except Exception:
             logger.exception(
                 "Could not store recommendations after import."
+            )
+    analytics = getattr(request.app.state, "analytics_service", None)
+    if analytics is not None:
+        try:
+            analytics.record_letterboxd_import(
+                db,
+                record.user.id if record is not None else None,
+            )
+        except Exception:
+            db.rollback()
+            logger.exception(
+                "Could not record the Letterboxd import event."
             )
     return result

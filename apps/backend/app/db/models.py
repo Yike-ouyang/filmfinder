@@ -44,6 +44,12 @@ class User(Base):
     email_verified_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    is_admin: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("0"),
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -473,3 +479,29 @@ class CatalogFilmGenre(Base):
     film: Mapped["CatalogFilm"] = relationship(
         back_populates="genre_rows"
     )
+
+
+class AnalyticsEvent(Base):
+    __tablename__ = "analytics_events"
+    __table_args__ = (
+        Index("ix_analytics_events_type_time", "event_type", "occurred_at"),
+        Index("ix_analytics_events_user_time", "user_id", "occurred_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    event_type: Mapped[str] = mapped_column(
+        String(64), nullable=False
+    )
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+    user: Mapped[Optional["User"]] = relationship()

@@ -64,6 +64,7 @@ after changing them. No TMDB token is used by the frontend.
 /discover       Swipe-based recommendation discovery
 /lists          Watchlist and Do Not Watch
 /login /signup  Account authentication
+/admin          Private administrator dashboard
 ```
 
 The floating navigation links Home, Films, Discover and My Lists. Opening
@@ -83,6 +84,10 @@ GET  /api/v1/me/profile-summary
 PUT  /api/v1/me/ratings/{film_id}
 DELETE /api/v1/me/ratings/{film_id}
 POST /api/v1/recommendations/from-saved-ratings
+GET  /api/v1/admin/overview
+GET  /api/v1/admin/activity?period=7d|30d|all
+GET  /api/v1/admin/users
+GET  /api/v1/admin/users/{user_id}
 ```
 
 The multipart field is named `file`. The import request is sent once and the

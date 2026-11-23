@@ -65,6 +65,7 @@ def _user_response(user: User) -> UserResponse:
         id=user.id,
         email=user.email,
         email_verified=user.email_verified_at is not None,
+        is_admin=bool(user.is_admin),
         created_at=user.created_at,
     )
 

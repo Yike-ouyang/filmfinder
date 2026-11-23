@@ -36,6 +36,7 @@ class UserResponse(BaseModel):
     id: int
     email: str
     email_verified: bool
+    is_admin: bool = False
     created_at: datetime
 
 

@@ -76,6 +76,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   rating_not_found: "No rating exists for this film.",
   rating_persistence_failed:
     "Your rating could not be saved. Try again in a moment.",
+  admin_required:
+    "This area is restricted to FilmFinder administrators.",
+  user_not_found: "This user does not exist.",
   backend_unavailable:
     "Cannot reach the FilmFinder backend. Make sure it is running and try again.",
   backend_error:
