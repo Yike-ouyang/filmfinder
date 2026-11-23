@@ -26,6 +26,7 @@ research, the production recommendation engine, and the web application.
 │   ├── development.md
 │   ├── deployment.md
 │   ├── film-library.md
+│   ├── admin-dashboard.md
 │   ├── repository-migration.md
 │   └── frontend.md
 ├── prompts/                     # task specifications
@@ -44,6 +45,10 @@ The frontend offers two ways to build a profile:
 Both use the same cold-start + KNN/M5 engine. The browsable library is backed
 by a SQLite catalogue synchronized from `movie_data.csv` and the production
 artifacts. See `docs/film-library.md`.
+
+Administrators get a private read-only `/admin` dashboard for account,
+activity, recommendation, rating and list metrics. See
+`docs/admin-dashboard.md`.
 
 ## Data and artifacts
 

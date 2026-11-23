@@ -13,6 +13,7 @@ const USER = {
   id: 1,
   email: "user@example.com",
   email_verified: true,
+  is_admin: false,
   created_at: "2026-11-21T10:00:00Z",
 };
 

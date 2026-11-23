@@ -8,7 +8,7 @@ const navigation = vi.hoisted(() => ({
   push: vi.fn(),
 }));
 const authState = vi.hoisted(() => ({
-  user: null as null | { email: string },
+  user: null as null | { email: string; is_admin?: boolean },
   loading: false,
   signOut: vi.fn(),
 }));
@@ -48,6 +48,19 @@ describe("FloatingNavbar auth state", () => {
       "href",
       "/lists",
     );
+  });
+
+  it("shows the admin link only for administrators", () => {
+    authState.user = { email: "admin@example.com", is_admin: true };
+    const { unmount } = render(<FloatingNavbar />);
+    expect(screen.getByRole("link", { name: "Admin" })).toHaveAttribute(
+      "href",
+      "/admin",
+    );
+    unmount();
+    authState.user = { email: "user@example.com", is_admin: false };
+    render(<FloatingNavbar />);
+    expect(screen.queryByRole("link", { name: "Admin" })).toBeNull();
   });
 
   it("shows account controls for signed-in users", async () => {

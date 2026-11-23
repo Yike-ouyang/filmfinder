@@ -113,6 +113,23 @@ python apps/backend/scripts/enrich_tmdb_metadata.py \
   --resume
 ```
 
+## Admin dashboard
+
+Apply the admin migration, then grant the role to an existing local account:
+
+```bash
+alembic -c apps/backend/alembic.ini upgrade head
+python apps/backend/scripts/grant_admin.py --email admin@example.com
+```
+
+Prune analytics events with:
+
+```bash
+python apps/backend/scripts/prune_analytics.py --retention-days 365
+```
+
+See `docs/admin-dashboard.md` for metric definitions.
+
 ## Tests
 
 ```bash

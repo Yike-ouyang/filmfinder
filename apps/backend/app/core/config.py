@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     signup_rate_limit_window_seconds: int = 3600
     email_rate_limit_attempts: int = 3
     email_rate_limit_window_seconds: int = 900
+    analytics_retention_days: int = 365
 
     @property
     def artifacts_path(self) -> Path:

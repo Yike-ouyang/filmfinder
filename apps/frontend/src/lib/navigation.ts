@@ -1,4 +1,4 @@
-const ALLOWED_NEXT_PATHS = new Set(["/films", "/discover", "/lists"]);
+const ALLOWED_NEXT_PATHS = new Set(["/films", "/discover", "/lists", "/admin"]);
 const NEXT_STORAGE_KEY = "filmfinder.next-path.v1";
 
 export function safeNextPath(value: string | null): string | null {

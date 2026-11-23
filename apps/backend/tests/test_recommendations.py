@@ -4,6 +4,8 @@ import io
 import json
 import zipfile
 
+import pytest
+
 from filmfinder.letterboxd_import import load_letterboxd_profile
 
 from app.services.recommendation_service import RecommendationService
@@ -15,6 +17,24 @@ def _upload(client, path):
             "/api/v1/recommendations/from-letterboxd?limit=100",
             files={"file": ("profile.zip", handle, "application/zip")},
         )
+
+
+class RecordingAnalytics:
+    def __init__(self):
+        self.calls = []
+
+    def record_letterboxd_import(self, db, user_id, now=None):
+        del db
+        self.calls.append((user_id, now))
+
+
+@pytest.fixture(autouse=True)
+def _replace_analytics(client):
+    previous = client.app.state.analytics_service
+    fake = RecordingAnalytics()
+    client.app.state.analytics_service = fake
+    yield fake
+    client.app.state.analytics_service = previous
 
 
 def _zip_bytes(files):
@@ -98,6 +118,14 @@ def test_malformed_ratings(client):
         files={"file": ("bad-csv.zip", data, "application/zip")},
     )
     assert response.status_code == 422
+
+
+def test_import_records_analytics_event(
+    client, letterboxd_zip, _replace_analytics
+):
+    response = _upload(client, letterboxd_zip)
+    assert response.status_code == 200
+    assert _replace_analytics.calls == [(None, None)]
 
 
 def test_deterministic_response(client, letterboxd_zip):

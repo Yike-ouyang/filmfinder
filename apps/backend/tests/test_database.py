@@ -35,6 +35,7 @@ EXPECTED_TABLES = {
     "recommendation_items",
     "catalog_films",
     "catalog_film_genres",
+    "analytics_events",
 }
 
 

@@ -81,6 +81,20 @@ export function FloatingNavbar() {
             </span>
           ) : user ? (
             <>
+              {user.is_admin ? (
+                <Link
+                  href="/admin"
+                  aria-current={pathname.startsWith("/admin") ? "page" : undefined}
+                  className={cn(
+                    navItemClass,
+                    pathname.startsWith("/admin")
+                      ? "bg-white text-black"
+                      : "text-white/60 hover:bg-white/5 hover:text-white",
+                  )}
+                >
+                  Admin
+                </Link>
+              ) : null}
               <Link
                 href="/account"
                 aria-current={pathname.startsWith("/account") ? "page" : undefined}

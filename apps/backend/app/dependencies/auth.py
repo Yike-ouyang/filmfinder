@@ -57,6 +57,18 @@ def get_current_user(
     return record.user
 
 
+def get_current_admin(
+    record: UserSession = Depends(get_current_session),
+) -> User:
+    if not bool(record.user.is_admin):
+        raise APIError(
+            403,
+            "admin_required",
+            "Administrator access is required.",
+        )
+    return record.user
+
+
 def require_public_csrf(
     request: Request,
     settings: Settings = Depends(get_app_settings),

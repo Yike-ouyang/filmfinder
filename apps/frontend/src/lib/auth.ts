@@ -20,11 +20,13 @@ function normalizeUser(value: unknown): AuthUser {
   const id = value.id;
   const email = value.email;
   const emailVerified = value.email_verified;
+  const isAdmin = value.is_admin;
   const createdAt = value.created_at;
   if (
     typeof id !== "number" ||
     typeof email !== "string" ||
     typeof emailVerified !== "boolean" ||
+    typeof isAdmin !== "boolean" ||
     typeof createdAt !== "string"
   ) {
     throw new ApiError("invalid_response", 200);
@@ -33,6 +35,7 @@ function normalizeUser(value: unknown): AuthUser {
     id,
     email,
     email_verified: emailVerified,
+    is_admin: isAdmin,
     created_at: createdAt,
   };
 }

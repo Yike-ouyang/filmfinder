@@ -17,6 +17,7 @@ from app.core.config import Settings, get_settings
 from app.core.exceptions import APIError
 from app.core.rate_limit import RateLimiter
 from app.db.base import get_session_factory
+from app.services.analytics_service import AnalyticsService
 from app.services.email_service import build_email_sender
 from app.services.metadata_service import TMDBMetadataService
 from app.services.profile_service import ProfileService
@@ -49,6 +50,7 @@ def create_app(
         app.state.batch_service = None
         app.state.email_sender = build_email_sender(settings)
         app.state.rate_limiter = RateLimiter()
+        app.state.analytics_service = AnalyticsService()
         if load_engine:
             app.state.metadata = TMDBMetadataService.load(
                 settings.tmdb_metadata_file
