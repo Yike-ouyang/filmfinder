@@ -20,6 +20,7 @@ interface FilmDetailDialogProps {
   initialFilm?: FilmListItem | null;
   isAuthenticated: boolean;
   authNextPath?: string;
+  readOnlyActions?: boolean;
   onClose: () => void;
   onFilmPatch?: (filmId: number, patch: Partial<FilmListItem>) => void;
   onRatingCountChange?: (count: number) => void;
@@ -32,6 +33,7 @@ interface FilmDetailContentProps {
   isAuthenticated: boolean;
   authNextPath: string;
   titleId: string;
+  readOnlyActions?: boolean;
   onFilmPatch?: (filmId: number, patch: Partial<FilmListItem>) => void;
   onRatingCountChange?: (count: number) => void;
   onRequireAuth?: () => void;
@@ -47,6 +49,7 @@ function FilmDetailContent({
   isAuthenticated,
   authNextPath,
   titleId,
+  readOnlyActions = false,
   onFilmPatch,
   onRatingCountChange,
   onRequireAuth,
@@ -190,6 +193,7 @@ function FilmDetailContent({
           onListChange={isAuthenticated ? handleList : undefined}
           onListRemove={isAuthenticated ? handleListRemove : undefined}
           busy={busy}
+          readOnlyActions={readOnlyActions}
           error={actionError ?? (loading ? null : error)}
           extra={
             <p className="text-[10px] font-medium uppercase tracking-[0.3em] text-white/45">
@@ -244,6 +248,7 @@ export function FilmDetailDialog({
   initialFilm,
   isAuthenticated,
   authNextPath = "/films",
+  readOnlyActions = false,
   onClose,
   onFilmPatch,
   onRatingCountChange,
@@ -265,6 +270,7 @@ export function FilmDetailDialog({
           isAuthenticated={isAuthenticated}
           authNextPath={authNextPath}
           titleId={titleId}
+          readOnlyActions={readOnlyActions}
           onFilmPatch={onFilmPatch}
           onRatingCountChange={onRatingCountChange}
           onRequireAuth={onRequireAuth}

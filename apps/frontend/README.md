@@ -1,8 +1,8 @@
 # FilmFinder frontend
 
-Cinematic Next.js frontend for FilmFinder. Import a Letterboxd ZIP export or
-build a profile manually from the `/films` library, then discover the results
-through a swipe-based interface.
+Cinematic Next.js frontend for FilmFinder. Import a Letterboxd ZIP export,
+browse the `/films` library, or rate 20 selected films in the Quick Taste
+Profile, then discover the results through a swipe-based interface.
 
 ## Stack
 
@@ -59,8 +59,9 @@ after changing them. No TMDB token is used by the frontend.
 ## Routes
 
 ```text
-/               Letterboxd import and manual-profile entry point
+/               Three profile-building entry points
 /films          Browsable catalogue, search, filters and star ratings
+/taste-profile  Quick Taste Profile: rate 20 films and generate discoveries
 /discover       Swipe-based recommendation discovery
 /lists          Watchlist and Do Not Watch
 /login /signup  Account authentication
@@ -77,6 +78,8 @@ The frontend calls:
 
 ```http
 POST /api/v1/recommendations/from-letterboxd?limit=100
+GET  /api/v1/taste-profile/movies
+POST /api/v1/taste-profile/recommendations?limit=100
 GET  /api/v1/films
 GET  /api/v1/films/facets
 GET  /api/v1/films/{film_id}

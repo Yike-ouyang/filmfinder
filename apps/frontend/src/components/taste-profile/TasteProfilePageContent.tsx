@@ -1,0 +1,1053 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  AlertCircle,
+  ArrowRight,
+  LoaderCircle,
+  RotateCcw,
+  Sparkles,
+} from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { FilmDetailDialog } from "@/components/films/FilmDetailDialog";
+import { TasteMovieCard } from "@/components/taste-profile/TasteMovieCard";
+import { TasteProfileBackdrop } from "@/components/taste-profile/TasteProfileBackdrop";
+import { TmdbAttribution } from "@/components/ui/TmdbAttribution";
+import {
+  ApiError,
+  errorMessage,
+  requestTasteProfileMovies,
+  requestTasteProfileRecommendations,
+} from "@/lib/api";
+import {
+  RECOMMENDATION_LIMIT,
+  TASTE_PROFILE_LOADING_MESSAGES,
+} from "@/lib/constants";
+import { fetchProfileSummary } from "@/lib/ratings";
+import { saveBatch } from "@/lib/storage";
+import {
+  countRatedAnswers,
+  initialTasteProfileState,
+  isTasteProfileComplete,
+  tasteProfileReducer,
+} from "@/lib/tasteProfile";
+import {
+  clearTasteProfileDraft,
+  loadTasteProfileDraft,
+  saveTasteProfileDraft,
+} from "@/lib/tasteProfileDraft";
+import type { ProfileSummary } from "@/types/films";
+import type {
+  TasteProfileAnswer,
+  TasteProfileMoviesResponse,
+} from "@/types/tasteProfile";
+
+type LoadStatus = "loading" | "ready" | "error";
+type SubmitStatus = "idle" | "loading" | "ready" | "error";
+
+const NEXT_PATH = encodeURIComponent("/taste-profile");
+
+function CenteredShell({ children }: { children: React.ReactNode }) {
+  return (
+    <main
+      id="main"
+      className="relative flex min-h-svh items-center justify-center overflow-hidden bg-background px-5 py-24 sm:px-8"
+    >
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 bg-[radial-gradient(100%_80%_at_50%_0%,#1b1b1b_0%,#0d0d0d_45%,#080808_80%)]"
+      />
+      <div className="relative z-10 w-full max-w-xl">{children}</div>
+    </main>
+  );
+}
+
+function LoadingPanel({ message }: { message: string }) {
+  return (
+    <CenteredShell>
+      <div
+        role="status"
+        aria-live="polite"
+        className="mx-auto flex max-w-md flex-col items-center gap-4 text-center text-white/60"
+      >
+        <LoaderCircle
+          aria-hidden="true"
+          className="h-5 w-5 animate-spin text-white/60"
+        />
+        <p className="text-sm">{message}</p>
+      </div>
+    </CenteredShell>
+  );
+}
+
+function ErrorPanel({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <CenteredShell>
+      <div className="rounded-3xl border border-white/10 bg-black/45 px-6 py-8 text-center shadow-[0_40px_120px_-30px_rgba(0,0,0,0.95)] backdrop-blur-xl sm:px-10">
+        <span className="mx-auto grid h-12 w-12 place-items-center rounded-full border border-[#e7a6a6]/20 bg-[#e7a6a6]/[0.06]">
+          <AlertCircle aria-hidden="true" className="h-5 w-5 text-danger" />
+        </span>
+        <h1 className="mt-5 text-2xl font-semibold tracking-[-0.03em] text-white">
+          Something went wrong
+        </h1>
+        <p className="mt-3 text-sm leading-relaxed text-white/55">{message}</p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-full bg-white px-6 text-sm font-medium text-black transition-opacity hover:opacity-90"
+        >
+          <RotateCcw aria-hidden="true" className="h-4 w-4" />
+          Try again
+        </button>
+      </div>
+    </CenteredShell>
+  );
+}
+
+function IntroPanel({
+  data,
+  onStart,
+  isAuthenticated,
+}: {
+  data: TasteProfileMoviesResponse;
+  onStart: () => void;
+  isAuthenticated: boolean;
+}) {
+  const reduceMotion = useReducedMotion();
+  return (
+    <motion.section
+      aria-labelledby="taste-profile-title"
+      className="rounded-3xl border border-white/10 bg-black/45 px-6 py-8 text-center shadow-[0_40px_120px_-30px_rgba(0,0,0,0.95)] backdrop-blur-xl sm:px-10 sm:py-10"
+      initial={reduceMotion ? false : { opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: reduceMotion ? 0 : 0.4,
+        ease: [0.22, 1, 0.36, 1],
+      }}
+    >
+      <span className="mx-auto grid h-12 w-12 place-items-center rounded-full border border-white/10 bg-white/[0.04]">
+        <Sparkles aria-hidden="true" className="h-5 w-5 text-white/70" />
+      </span>
+      <p className="mt-5 text-[10px] font-medium uppercase tracking-[0.3em] text-white/50">
+        Quick Taste Profile
+      </p>
+      <h1
+        id="taste-profile-title"
+        className="mt-4 text-balance text-3xl font-semibold leading-tight tracking-[-0.035em] text-white sm:text-4xl"
+      >
+        Rate a few films. Find your next favorite.
+      </h1>
+      <p className="mx-auto mt-4 max-w-md text-sm leading-relaxed text-white/55">
+        Go through {data.movies.length} films and tell us what you thought.
+        We&apos;ll use your ratings to find movies made for your taste.
+      </p>
+
+      <dl className="mt-6 grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-white/[0.02] px-2 py-4">
+        <div>
+          <dt className="text-[9px] uppercase tracking-[0.16em] text-white/55">
+            Films
+          </dt>
+          <dd className="mt-1.5 text-xl font-semibold text-white">
+            {data.movies.length}
+          </dd>
+        </div>
+        <div className="border-x border-white/10">
+          <dt className="text-[9px] uppercase tracking-[0.16em] text-white/55">
+            Minimum
+          </dt>
+          <dd className="mt-1.5 text-xl font-semibold text-white">
+            {data.min_ratings}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-[9px] uppercase tracking-[0.16em] text-white/55">
+            Recommended
+          </dt>
+          <dd className="mt-1.5 text-xl font-semibold text-white">
+            {data.recommended_min_ratings}
+          </dd>
+        </div>
+      </dl>
+
+      <button
+        type="button"
+        onClick={onStart}
+        className="group mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-full bg-white px-7 text-sm font-medium text-black transition-opacity hover:opacity-90"
+      >
+        Start rating
+        <ArrowRight
+          aria-hidden="true"
+          className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5"
+        />
+      </button>
+
+      <p className="mt-5 text-[11px] leading-relaxed text-white/40">
+        {isAuthenticated
+          ? "Your ratings will be saved to your account."
+          : "No account needed. Want to keep your ratings? "}
+        {!isAuthenticated ? (
+          <Link
+            href={`/signup?next=${NEXT_PATH}`}
+            className="text-white/70 underline decoration-white/20 underline-offset-2 hover:text-white"
+          >
+            Create an account
+          </Link>
+        ) : null}
+      </p>
+    </motion.section>
+  );
+}
+
+function DraftPanel({
+  isAuthenticated,
+  saving,
+  error,
+  onSave,
+  onDiscard,
+}: {
+  isAuthenticated: boolean;
+  saving: boolean;
+  error: string | null;
+  onSave: () => void;
+  onDiscard: () => void;
+}) {
+  return (
+    <div className="mt-4 rounded-2xl border border-white/10 bg-black/45 px-5 py-4 text-center backdrop-blur-xl">
+      <p className="text-sm font-medium text-white">
+        {isAuthenticated
+          ? "Save your Taste Profile to your account"
+          : "You have an unsaved Taste Profile in this browser"}
+      </p>
+      <p className="mt-1 text-[11px] leading-relaxed text-white/50">
+        {isAuthenticated
+          ? "Keep these ratings so they can be used again next time."
+          : "Create an account or log in to keep these ratings."}
+      </p>
+      {error ? (
+        <p className="mt-2 text-[11px] text-danger">{error}</p>
+      ) : null}
+      <div className="mt-3 flex flex-col justify-center gap-2 sm:flex-row">
+        {isAuthenticated ? (
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={saving}
+            className="inline-flex h-9 items-center justify-center rounded-full bg-white px-4 text-xs font-medium text-black transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save my profile"}
+          </button>
+        ) : (
+          <>
+            <Link
+              href={`/signup?next=${NEXT_PATH}`}
+              className="inline-flex h-9 items-center justify-center rounded-full bg-white px-4 text-xs font-medium text-black transition-opacity hover:opacity-90"
+            >
+              Create an account
+            </Link>
+            <Link
+              href={`/login?next=${NEXT_PATH}`}
+              className="inline-flex h-9 items-center justify-center rounded-full border border-white/10 px-4 text-xs font-medium text-white/70 transition-colors hover:bg-white/5 hover:text-white"
+            >
+              Log in
+            </Link>
+          </>
+        )}
+        <button
+          type="button"
+          onClick={onDiscard}
+          className="inline-flex h-9 items-center justify-center rounded-full px-3 text-xs font-medium text-white/40 transition-colors hover:text-white/70"
+        >
+          Discard
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function QuizHeader({
+  current,
+  total,
+  canUndo,
+  onUndo,
+}: {
+  current: number;
+  total: number;
+  canUndo: boolean;
+  onUndo: () => void;
+}) {
+  const label = `${current} / ${total} movies`;
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="min-w-0 flex-1">
+        <p
+          className="font-mono text-[11px] tracking-[0.16em] text-white/50"
+          aria-label={label}
+        >
+          <span className="text-white/80">{current}</span>
+          <span className="mx-1 text-white/20">/</span>
+          {total} movies
+        </p>
+        <div
+          role="progressbar"
+          aria-valuemin={1}
+          aria-valuemax={total}
+          aria-valuenow={current}
+          aria-label="Taste Profile progress"
+          className="mt-2 h-1 w-full max-w-xs overflow-hidden rounded-full bg-white/10"
+        >
+          <div
+            className="h-full rounded-full bg-white transition-[width] duration-300 ease-out"
+            style={{ width: `${(current / total) * 100}%` }}
+          />
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onUndo}
+        disabled={!canUndo}
+        aria-label="Undo the previous rating (Backspace)"
+        title="Undo (Backspace)"
+        className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white/10 bg-black/35 px-3 text-[11px] font-medium text-white/60 backdrop-blur-md transition-colors hover:border-white/20 hover:text-white disabled:pointer-events-none disabled:opacity-30"
+      >
+        <RotateCcw aria-hidden="true" className="h-3.5 w-3.5" />
+        Undo
+      </button>
+    </div>
+  );
+}
+
+function FinalPanel({
+  title,
+  body,
+  primaryLabel,
+  onPrimary,
+  onReview,
+  onRestart,
+  isAuthenticated,
+}: {
+  title: string;
+  body: string;
+  primaryLabel?: string;
+  onPrimary?: () => void;
+  onReview: () => void;
+  onRestart: () => void;
+  isAuthenticated: boolean;
+}) {
+  return (
+    <CenteredShell>
+      <section
+        aria-labelledby="taste-profile-final-title"
+        className="rounded-3xl border border-white/10 bg-black/45 px-6 py-8 text-center shadow-[0_40px_120px_-30px_rgba(0,0,0,0.95)] backdrop-blur-xl sm:px-10"
+      >
+        <span className="mx-auto grid h-12 w-12 place-items-center rounded-full border border-white/10 bg-white/[0.04]">
+          <Sparkles aria-hidden="true" className="h-5 w-5 text-white/70" />
+        </span>
+        <h1
+          id="taste-profile-final-title"
+          className="mt-5 text-balance text-2xl font-semibold tracking-[-0.03em] text-white sm:text-3xl"
+        >
+          {title}
+        </h1>
+        <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-white/55">
+          {body}
+        </p>
+        <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+          {primaryLabel && onPrimary ? (
+            <button
+              type="button"
+              onClick={onPrimary}
+              className="inline-flex h-11 items-center justify-center rounded-full bg-white px-6 text-sm font-medium text-black transition-opacity hover:opacity-90"
+            >
+              {primaryLabel}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onReview}
+            className="inline-flex h-11 items-center justify-center rounded-full border border-white/10 px-6 text-sm font-medium text-white/70 transition-colors hover:bg-white/5 hover:text-white"
+          >
+            Review my answers
+          </button>
+          <button
+            type="button"
+            onClick={onRestart}
+            className="inline-flex h-11 items-center justify-center rounded-full px-4 text-sm font-medium text-white/40 transition-colors hover:text-white/70"
+          >
+            Start over
+          </button>
+        </div>
+        {!isAuthenticated ? (
+          <p className="mt-5 text-[11px] leading-relaxed text-white/40">
+            Want to keep these ratings?{" "}
+            <Link
+              href={`/signup?next=${NEXT_PATH}`}
+              className="text-white/70 underline decoration-white/20 underline-offset-2 hover:text-white"
+            >
+              Create an account
+            </Link>{" "}
+            or{" "}
+            <Link
+              href={`/login?next=${NEXT_PATH}`}
+              className="text-white/70 underline decoration-white/20 underline-offset-2 hover:text-white"
+            >
+              log in
+            </Link>
+            .
+          </p>
+        ) : null}
+      </section>
+    </CenteredShell>
+  );
+}
+
+function SubmittingPanel({
+  message,
+  ready,
+}: {
+  message: string;
+  ready: boolean;
+}) {
+  return (
+    <CenteredShell>
+      <div
+        role="status"
+        aria-live="polite"
+        className="mx-auto flex max-w-md flex-col items-center gap-4 text-center"
+      >
+        <LoaderCircle
+          aria-hidden="true"
+          className="h-6 w-6 animate-spin text-white/70"
+        />
+        <p className="text-sm text-white/60">
+          {ready ? "Opening your discoveries..." : message}
+        </p>
+      </div>
+    </CenteredShell>
+  );
+}
+
+export function TasteProfilePageContent() {
+  const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
+  const [data, setData] = useState<TasteProfileMoviesResponse | null>(null);
+  const [loadStatus, setLoadStatus] = useState<LoadStatus>("loading");
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [state, dispatch] = useReducer(
+    tasteProfileReducer,
+    initialTasteProfileState,
+  );
+  const [submitStatus, setSubmitStatus] = useState<SubmitStatus>("idle");
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [messageIndex, setMessageIndex] = useState(0);
+  const [announcement, setAnnouncement] = useState("");
+  const [draftAnswers, setDraftAnswers] =
+    useState<TasteProfileAnswer[] | null>(null);
+  const [draftStatus, setDraftStatus] =
+    useState<"idle" | "saving" | "error">("idle");
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [summary, setSummary] = useState<ProfileSummary | null>(null);
+  const [summaryUserId, setSummaryUserId] = useState<number | null>(null);
+  const [summaryStatus, setSummaryStatus] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [detailsFilmId, setDetailsFilmId] = useState<number | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const draftAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    router.prefetch("/discover");
+  }, [router]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+    requestTasteProfileMovies({ signal: controller.signal })
+      .then((payload) => {
+        if (!active) {
+          return;
+        }
+        setData(payload);
+        setLoadStatus("ready");
+      })
+      .catch((error) => {
+        if (!active || controller.signal.aborted) {
+          return;
+        }
+        if (error instanceof ApiError && error.code === "cancelled") {
+          return;
+        }
+        setLoadError(errorMessage(error));
+        setLoadStatus("error");
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [loadAttempt]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+    const timer = window.setTimeout(() => {
+      if (!active) {
+        return;
+      }
+      if (!user) {
+        setSummary(null);
+        setSummaryUserId(null);
+        setSummaryStatus("idle");
+        return;
+      }
+      setSummaryStatus("loading");
+      fetchProfileSummary()
+        .then((payload) => {
+          if (!controller.signal.aborted) {
+            setSummary(payload);
+            setSummaryUserId(user.id);
+            setSummaryStatus("ready");
+          }
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) {
+            setSummaryStatus("error");
+          }
+        });
+    }, 0);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [user]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDraftAnswers(loadTasteProfileDraft());
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    return () => abortRef.current?.abort();
+  }, []);
+
+  useEffect(() => {
+    return () => draftAbortRef.current?.abort();
+  }, []);
+
+  useEffect(() => {
+    if (submitStatus !== "loading") {
+      return;
+    }
+    const interval = window.setInterval(() => {
+      setMessageIndex((index) => index + 1);
+    }, 2400);
+    return () => window.clearInterval(interval);
+  }, [submitStatus]);
+
+  const total = data?.movies.length ?? 0;
+  const complete = data ? isTasteProfileComplete(state, total) : false;
+  const ratedAnswers = countRatedAnswers(state.answers);
+  const current = data ? data.movies[state.index] ?? null : null;
+  const currentAnswer = current
+    ? state.answers.find(
+        (answer) =>
+          answer.internal_movie_id === current.internal_movie_id,
+      )
+    : undefined;
+  const currentRating = currentAnswer
+    ? currentAnswer.rating
+    : current?.user_rating ?? null;
+
+  const existingInSelection = useMemo(
+    () =>
+      new Set(
+        (data?.movies ?? [])
+          .filter((movie) => movie.user_rating !== null)
+          .map((movie) => movie.internal_movie_id),
+      ),
+    [data],
+  );
+  const additionalRatings = state.answers.filter(
+    (answer) =>
+      answer.rating !== null &&
+      !existingInSelection.has(answer.internal_movie_id),
+  ).length;
+  const visibleSummary =
+    user && summaryUserId === user.id && summaryStatus === "ready"
+      ? summary
+      : null;
+  const totalRatings = user
+    ? visibleSummary
+      ? visibleSummary.ratings_count + additionalRatings
+      : Math.max(ratedAnswers, data?.min_ratings ?? 1)
+    : ratedAnswers;
+  const enoughRatings =
+    data !== null && totalRatings >= data.min_ratings;
+  const recommendedRatings =
+    data !== null && totalRatings >= data.recommended_min_ratings;
+  const summaryPending = Boolean(user && summaryStatus === "loading");
+
+  const submitAnswers = useCallback(
+    async (answers: TasteProfileAnswer[], authenticated: boolean) => {
+      if (data && answers.length !== data.movies.length) {
+        return false;
+      }
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setSubmitStatus("loading");
+      setSubmitError(null);
+      setMessageIndex(0);
+      try {
+        const result = await requestTasteProfileRecommendations({
+          answers,
+          limit: RECOMMENDATION_LIMIT,
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) {
+          return false;
+        }
+        if (!saveBatch(result, [])) {
+          setSubmitError(
+            "Your browser could not store this session. Allow session storage for this site and try again.",
+          );
+          setSubmitStatus("error");
+          return false;
+        }
+        if (!authenticated) {
+          saveTasteProfileDraft(answers);
+        } else {
+          clearTasteProfileDraft();
+          setDraftAnswers(null);
+        }
+        setSubmitStatus("ready");
+        router.push("/discover");
+        return true;
+      } catch (error) {
+        if (controller.signal.aborted) {
+          return false;
+        }
+        if (error instanceof ApiError && error.code === "cancelled") {
+          return false;
+        }
+        setSubmitError(errorMessage(error));
+        setSubmitStatus("error");
+        return false;
+      } finally {
+        if (abortRef.current === controller) {
+          abortRef.current = null;
+        }
+      }
+    },
+    [data, router],
+  );
+
+  const submit = useCallback(async () => {
+    if (!data || state.answers.length !== data.movies.length) {
+      return;
+    }
+    await submitAnswers(state.answers, Boolean(user));
+  }, [data, state.answers, submitAnswers, user]);
+
+  const saveDraft = useCallback(async () => {
+    if (!draftAnswers) {
+      return;
+    }
+    const controller = new AbortController();
+    draftAbortRef.current = controller;
+    setDraftStatus("saving");
+    setDraftError(null);
+    try {
+      const result = await requestTasteProfileRecommendations({
+        answers: draftAnswers,
+        limit: RECOMMENDATION_LIMIT,
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) {
+        return;
+      }
+      if (!saveBatch(result, [])) {
+        setDraftError(
+          "Your browser could not store this session. Allow session storage for this site and try again.",
+        );
+        setDraftStatus("error");
+        return;
+      }
+      clearTasteProfileDraft();
+      setDraftAnswers(null);
+      setDraftStatus("idle");
+      router.push("/discover");
+    } catch (error) {
+      if (controller.signal.aborted) {
+        return;
+      }
+      setDraftError(errorMessage(error));
+      setDraftStatus("error");
+    } finally {
+      if (draftAbortRef.current === controller) {
+        draftAbortRef.current = null;
+      }
+    }
+  }, [draftAnswers, router]);
+
+  const discardDraft = useCallback(() => {
+    clearTasteProfileDraft();
+    setDraftAnswers(null);
+    setDraftStatus("idle");
+    setDraftError(null);
+  }, []);
+
+  useEffect(() => {
+    if (
+      loadStatus !== "ready" ||
+      !complete ||
+      submitStatus !== "idle"
+    ) {
+      return;
+    }
+    if (!user && !authLoading) {
+      saveTasteProfileDraft(state.answers);
+    }
+  }, [
+    authLoading,
+    complete,
+    loadStatus,
+    state.answers,
+    submitStatus,
+    user,
+  ]);
+
+  useEffect(() => {
+    if (
+      loadStatus !== "ready" ||
+      !complete ||
+      !enoughRatings ||
+      !recommendedRatings ||
+      summaryPending ||
+      submitStatus !== "idle"
+    ) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void submit();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [
+    complete,
+    enoughRatings,
+    loadStatus,
+    recommendedRatings,
+    submit,
+    submitStatus,
+    summaryPending,
+  ]);
+
+  const handleAnswer = useCallback(
+    (rating: number | null) => {
+      if (!current || submitStatus === "loading" || submitStatus === "ready") {
+        return;
+      }
+      dispatch({ type: "answer", movie: current, rating });
+      const next = state.index + 1;
+      if (rating === null) {
+        setAnnouncement(
+          `Skipped ${current.title} without a rating. ${next} of ${total} movies.`,
+        );
+      } else {
+        setAnnouncement(
+          `Rated ${current.title} ${rating} out of 10. ${next} of ${total} movies.`,
+        );
+      }
+    },
+    [current, state.index, submitStatus, total],
+  );
+
+  const handleRate = useCallback(
+    (rating: number) => handleAnswer(rating),
+    [handleAnswer],
+  );
+
+  const handleUndo = useCallback(() => {
+    if (state.index === 0) {
+      return;
+    }
+    dispatch({ type: "undo" });
+    setSubmitStatus("idle");
+    setSubmitError(null);
+    setAnnouncement("Restored the previous movie.");
+  }, [state.index]);
+
+  const handleRestart = useCallback(() => {
+    dispatch({ type: "restart" });
+    setSubmitStatus("idle");
+    setSubmitError(null);
+    setAnnouncement("Taste Profile restarted.");
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        !state.started ||
+        complete ||
+        detailsFilmId !== null ||
+        submitStatus === "loading" ||
+        submitStatus === "ready" ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      ) {
+        return;
+      }
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        target.closest("input, textarea, select, [contenteditable='true']")
+      ) {
+        return;
+      }
+      if (event.key === "Backspace") {
+        event.preventDefault();
+        handleUndo();
+        return;
+      }
+      if (event.key.toLowerCase() === "h") {
+        event.preventDefault();
+        handleAnswer(null);
+        return;
+      }
+      if (/^[0-9]$/.test(event.key)) {
+        event.preventDefault();
+        const rating = event.key === "0" ? 10 : Number(event.key);
+        handleAnswer(rating);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    complete,
+    detailsFilmId,
+    handleAnswer,
+    handleUndo,
+    state.started,
+    submitStatus,
+  ]);
+
+  if (loadStatus === "loading") {
+    return <LoadingPanel message="Loading your Taste Profile..." />;
+  }
+
+  if (loadStatus === "error" || !data) {
+    return (
+      <ErrorPanel
+        message={loadError ?? "The Taste Profile could not be loaded."}
+        onRetry={() => {
+          setLoadStatus("loading");
+          setLoadError(null);
+          setLoadAttempt((attempt) => attempt + 1);
+        }}
+      />
+    );
+  }
+
+  if (!state.started) {
+    return (
+      <main
+        id="main"
+        className="relative flex min-h-svh items-center justify-center overflow-hidden bg-background px-5 py-32 sm:px-8"
+      >
+        <TasteProfileBackdrop movie={data.movies[0] ?? null} priority />
+        <div className="relative z-10 w-full max-w-xl">
+          <IntroPanel
+            data={data}
+            isAuthenticated={Boolean(user)}
+            onStart={() => {
+              clearTasteProfileDraft();
+              setDraftAnswers(null);
+              dispatch({ type: "start" });
+            }}
+          />
+          {draftAnswers && !authLoading ? (
+            <DraftPanel
+              isAuthenticated={Boolean(user)}
+              saving={draftStatus === "saving"}
+              error={draftError}
+              onSave={() => void saveDraft()}
+              onDiscard={discardDraft}
+            />
+          ) : null}
+          <div className="mt-6 text-center">
+            <TmdbAttribution />
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (complete) {
+    if (submitStatus === "error") {
+      return (
+        <ErrorPanel
+          message={submitError ?? "Your recommendations could not be prepared."}
+          onRetry={() => void submit()}
+        />
+      );
+    }
+    if (submitStatus === "loading" || submitStatus === "ready") {
+      return (
+        <SubmittingPanel
+          ready={submitStatus === "ready"}
+          message={
+            TASTE_PROFILE_LOADING_MESSAGES[
+              messageIndex % TASTE_PROFILE_LOADING_MESSAGES.length
+            ]
+          }
+        />
+      );
+    }
+    if (summaryPending) {
+      return (
+        <SubmittingPanel
+          ready={false}
+          message="Checking your saved profile..."
+        />
+      );
+    }
+    if (totalRatings === 0) {
+      return (
+        <FinalPanel
+          title="No ratings yet."
+          body="You skipped every film. Rate at least a few movies so we can build a useful profile for you."
+          onReview={handleUndo}
+          onRestart={handleRestart}
+          isAuthenticated={Boolean(user)}
+        />
+      );
+    }
+    if (!enoughRatings) {
+      return (
+        <FinalPanel
+          title="A few more ratings would help."
+          body={`You have ${totalRatings} rating${
+            totalRatings === 1 ? "" : "s"
+          }, but at least ${data.min_ratings} are needed to build a useful profile.`}
+          onReview={handleUndo}
+          onRestart={handleRestart}
+          isAuthenticated={Boolean(user)}
+        />
+      );
+    }
+    if (!recommendedRatings) {
+      return (
+        <FinalPanel
+          title="Your profile is taking shape."
+          body={`You have ${totalRatings} rating${
+            totalRatings === 1 ? "" : "s"
+          }. FilmFinder recommends at least ${data.recommended_min_ratings} ratings for sharper recommendations. You can continue now or review your answers.`}
+          primaryLabel="See my recommendations"
+          onPrimary={() => void submit()}
+          onReview={handleUndo}
+          onRestart={handleRestart}
+          isAuthenticated={Boolean(user)}
+        />
+      );
+    }
+    return (
+      <SubmittingPanel
+        ready={false}
+        message={
+          TASTE_PROFILE_LOADING_MESSAGES[
+            messageIndex % TASTE_PROFILE_LOADING_MESSAGES.length
+          ]
+        }
+      />
+    );
+  }
+
+  return (
+    <main
+      id="main"
+      className="relative flex min-h-svh flex-col overflow-hidden bg-background"
+    >
+      <TasteProfileBackdrop movie={current} priority={state.index === 0} />
+
+      <h1 className="sr-only">Quick Taste Profile</h1>
+
+      <div className="safe-bottom-tight relative z-10 flex min-h-svh flex-col px-5 pt-20 sm:px-8 sm:pt-24">
+        <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col">
+          <QuizHeader
+            current={Math.min(state.index + 1, total)}
+            total={total}
+            canUndo={state.index > 0}
+            onUndo={handleUndo}
+          />
+
+          <div className="flex flex-1 items-center justify-center py-4">
+            <AnimatePresence mode="wait">
+              {current ? (
+                <TasteMovieCard
+                  key={`${current.internal_movie_id}-${state.index}`}
+                  movie={current}
+                  rating={currentRating}
+                  onRate={handleRate}
+                  onSkip={() => handleAnswer(null)}
+                  onViewDetails={() =>
+                    setDetailsFilmId(current.internal_movie_id)
+                  }
+                  disabled={
+                    submitStatus === "loading" || submitStatus === "ready"
+                  }
+                />
+              ) : null}
+            </AnimatePresence>
+          </div>
+
+          <div className="flex min-h-[54px] shrink-0 flex-col items-center justify-end gap-2 pb-2">
+            <p className="text-center text-[11px] leading-relaxed text-white/40">
+              Haven&apos;t Seen skips the movie without rating it. Use keys
+              1–9 and 0 for 10, H to skip, and Backspace to undo.
+            </p>
+            <p className="text-center text-[10px] text-white/25">
+              {!authLoading && user
+                ? "Your ratings will be saved to your account."
+                : "No account needed. Your answers stay in this browser."}
+            </p>
+          </div>
+
+          <footer className="pb-1 pt-1 text-center">
+            <TmdbAttribution />
+          </footer>
+        </div>
+      </div>
+
+      <FilmDetailDialog
+        open={detailsFilmId !== null}
+        filmId={detailsFilmId}
+        isAuthenticated={Boolean(user)}
+        authNextPath="/taste-profile"
+        readOnlyActions
+        onClose={() => setDetailsFilmId(null)}
+      />
+
+      <p className="sr-only" role="status" aria-live="polite">
+        {announcement}
+      </p>
+    </main>
+  );
+}

@@ -50,6 +50,47 @@ class RatingService:
             ratings_count=self._count_ratings(db, user.id),
         )
 
+    def set_ratings(
+        self,
+        db: Session,
+        user: User,
+        ratings: dict[int, int],
+    ) -> int:
+        values = {
+            int(film_id): float(rating)
+            for film_id, rating in (ratings or {}).items()
+        }
+        if not values:
+            return self._count_ratings(db, user.id)
+        if any(rating < 1 or rating > 10 for rating in values.values()):
+            raise APIError(
+                422,
+                "invalid_taste_rating",
+                "Taste Profile ratings must be between 1 and 10.",
+            )
+        try:
+            self.profile_service.save_ratings(
+                db,
+                user,
+                values,
+                commit=False,
+            )
+            db.execute(
+                delete(UserSwipe).where(
+                    UserSwipe.user_id == user.id,
+                    UserSwipe.internal_movie_id.in_(values.keys()),
+                )
+            )
+            db.commit()
+        except Exception as error:
+            db.rollback()
+            raise APIError(
+                500,
+                "rating_persistence_failed",
+                "Your ratings could not be saved.",
+            ) from error
+        return self._count_ratings(db, user.id)
+
     def delete_rating(
         self,
         db: Session,
