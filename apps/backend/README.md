@@ -47,6 +47,8 @@ GET /health
 GET /api/v1/ready
 POST /api/v1/recommendations/from-letterboxd?limit=100
 POST /api/v1/recommendations/from-saved-ratings
+GET /api/v1/taste-profile/movies
+POST /api/v1/taste-profile/recommendations?limit=100
 GET /api/v1/recommendations/current
 GET /api/v1/films
 GET /api/v1/films/facets

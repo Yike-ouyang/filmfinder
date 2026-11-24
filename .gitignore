@@ -30,6 +30,8 @@ data/
 datasets/
 raw/
 /Data/
+!apps/backend/app/data/
+!apps/backend/app/data/quick_taste_movies.json
 *.npy
 *.npz
 *.parquet

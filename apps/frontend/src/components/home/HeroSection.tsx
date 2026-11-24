@@ -1,6 +1,4 @@
-import { BuildProfileCTA } from "@/components/home/BuildProfileCTA";
-import { HowItWorks } from "@/components/home/HowItWorks";
-import { LetterboxdUploader } from "@/components/home/LetterboxdUploader";
+import { StartOptions } from "@/components/home/StartOptions";
 import { TmdbAttribution } from "@/components/ui/TmdbAttribution";
 import { TmdbMedia } from "@/components/ui/TmdbMedia";
 import {
@@ -42,7 +40,7 @@ export function HeroSection() {
       />
 
       <div className="relative z-10 flex flex-1 items-center justify-center px-5 pb-28 pt-32 sm:px-8 sm:pt-36">
-        <div className="w-full max-w-4xl text-center">
+        <div className="w-full max-w-6xl text-center">
           <p className="mb-7 text-[10px] font-medium uppercase tracking-[0.34em] text-white/50 sm:text-[11px]">
             Personalized movie discovery
           </p>
@@ -53,19 +51,14 @@ export function HeroSection() {
             {SITE_DESCRIPTION}
           </p>
 
-          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row sm:items-start sm:gap-5">
-            <LetterboxdUploader />
-            <HowItWorks />
-          </div>
-
-          <BuildProfileCTA />
+          <StartOptions />
         </div>
       </div>
 
       <footer className="safe-bottom relative z-10 mx-auto flex w-full max-w-5xl flex-col items-center gap-3 px-5 text-center sm:px-8">
         <p className="text-[11px] tracking-wide text-white/50">
-          Import a Letterboxd archive in memory, or create an account to build
-          your profile manually.
+          Import a Letterboxd archive in memory, browse the library, or answer
+          a 20-film Quick Taste Profile.
         </p>
         <TmdbAttribution />
       </footer>

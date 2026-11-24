@@ -27,6 +27,7 @@ research, the production recommendation engine, and the web application.
 │   ├── deployment.md
 │   ├── film-library.md
 │   ├── admin-dashboard.md
+│   ├── quick-taste-profile.md
 │   ├── repository-migration.md
 │   └── frontend.md
 ├── prompts/                     # task specifications
@@ -37,14 +38,18 @@ research, the production recommendation engine, and the web application.
 
 ## Web application
 
-The frontend offers two ways to build a profile:
+The frontend offers three ways to build a profile:
 
 - import a Letterboxd ZIP export;
-- browse `/films` and rate catalogue films manually.
+- browse `/films` and rate catalogue films manually;
+- complete the `/taste-profile` Quick Taste Profile by rating 20 selected
+  films with half-star precision.
 
-Both use the same cold-start + KNN/M5 engine. The browsable library is backed
-by a SQLite catalogue synchronized from `movie_data.csv` and the production
-artifacts. See `docs/film-library.md`.
+All three use the same cold-start + KNN/M5 engine. Quick Taste ratings are
+persisted in the same `user_films` table as library ratings. The browsable
+library is backed by a SQLite catalogue synchronized from `movie_data.csv` and
+the production artifacts. See `docs/film-library.md` and
+`docs/quick-taste-profile.md`.
 
 Administrators get a private read-only `/admin` dashboard for account,
 activity, recommendation, rating and list metrics. See

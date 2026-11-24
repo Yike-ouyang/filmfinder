@@ -26,7 +26,13 @@ import {
 
 type Phase = "idle" | "selected" | "uploading" | "ready";
 
-export function LetterboxdUploader() {
+interface LetterboxdUploaderProps {
+  buttonLabel?: string;
+}
+
+export function LetterboxdUploader({
+  buttonLabel = "Import Letterboxd",
+}: LetterboxdUploaderProps = {}) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -256,7 +262,11 @@ export function LetterboxdUploader() {
               aria-hidden="true"
               className="h-4 w-4 transition-transform duration-300 group-hover:-translate-y-0.5"
             />
-            Import Letterboxd
+            {buttonLabel}
+            <ArrowRight
+              aria-hidden="true"
+              className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5"
+            />
           </button>
           <p className="mt-3 text-[11px] text-white/50">
             Letterboxd ZIP export · max {uploadLimitLabel()}

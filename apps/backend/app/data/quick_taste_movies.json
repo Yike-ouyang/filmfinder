@@ -1,0 +1,451 @@
+{
+  "version": 2,
+  "generated_at": "2026-11-24",
+  "min_ratings": 3,
+  "recommended_min_ratings": 10,
+  "criteria": {
+    "min_popularity": 1000,
+    "anchor_min_popularity": 2000,
+    "anchor_min_mean": 7.8,
+    "divisive_min_mean": 4.5,
+    "divisive_max_mean": 8.5,
+    "divisive_min_variance": 3.5
+  },
+  "movies": [
+    {
+      "internal_movie_id": 1811,
+      "movie_id": "alien",
+      "title": "Alien",
+      "year": 1979,
+      "genres": [
+        "Horror",
+        "Science Fiction"
+      ],
+      "pool": "popular",
+      "tmdb_id": 348,
+      "poster_path": "/vfrQk5IPloGg1v9Rzbh2Eg3VGyM.jpg",
+      "backdrop_path": "/AmR3JG1VQVxU8TfAvljUhfSFUOx.jpg",
+      "metrics": {
+        "ratings_count": 4538,
+        "mean_rating": 8.8197,
+        "rating_variance": 1.7762,
+        "popularity_rank": 50,
+        "variance_rank": 2283
+      }
+    },
+    {
+      "internal_movie_id": 2112,
+      "movie_id": "amelie",
+      "title": "Amélie",
+      "year": 2001,
+      "genres": [
+        "Comedy",
+        "Romance"
+      ],
+      "pool": "popular",
+      "tmdb_id": 194,
+      "poster_path": "/nSxDa3M9aMvGVLoItzWTepQ5h5d.jpg",
+      "backdrop_path": "/6n53UI4mX9QMfe2S0Pgt8mGebY1.jpg",
+      "metrics": {
+        "ratings_count": 2784,
+        "mean_rating": 7.9239,
+        "rating_variance": 3.1221,
+        "popularity_rank": 435,
+        "variance_rank": 502
+      }
+    },
+    {
+      "internal_movie_id": 3260,
+      "movie_id": "back-to-the-future",
+      "title": "Back to the Future",
+      "year": 1985,
+      "genres": [
+        "Adventure",
+        "Comedy",
+        "Science Fiction",
+        "Family"
+      ],
+      "pool": "popular",
+      "tmdb_id": 105,
+      "poster_path": "/vN5B5WgYscRGcQpVhHl6p9DDTP0.jpg",
+      "backdrop_path": "/5bzPWQ2dFUl2aZKkp7ILJVVkRed.jpg",
+      "metrics": {
+        "ratings_count": 4337,
+        "mean_rating": 8.54,
+        "rating_variance": 2.1299,
+        "popularity_rank": 72,
+        "variance_rank": 1907
+      }
+    },
+    {
+      "internal_movie_id": 22806,
+      "movie_id": "parasite-2019",
+      "title": "Parasite",
+      "year": 2019,
+      "genres": [
+        "Comedy",
+        "Thriller",
+        "Drama"
+      ],
+      "pool": "popular",
+      "tmdb_id": 496243,
+      "poster_path": "/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg",
+      "backdrop_path": "/TU9NIjwzjoKPwQHoHshkFcQUCG.jpg",
+      "metrics": {
+        "ratings_count": 5989,
+        "mean_rating": 9.1623,
+        "rating_variance": 1.42,
+        "popularity_rank": 1,
+        "variance_rank": 2398
+      }
+    },
+    {
+      "internal_movie_id": 27643,
+      "movie_id": "spider-man-into-the-spider-verse",
+      "title": "Spider-Man: Into the Spider-Verse",
+      "year": 2018,
+      "genres": [
+        "Action",
+        "Adventure",
+        "Animation",
+        "Science Fiction",
+        "Comedy"
+      ],
+      "pool": "popular",
+      "tmdb_id": 324857,
+      "poster_path": "/iiZZdoQBEYBv6id8su7ImL0oCbD.jpg",
+      "backdrop_path": "/1ntePsIqeklfmrQJqZPncCydsqY.jpg",
+      "metrics": {
+        "ratings_count": 5287,
+        "mean_rating": 8.6701,
+        "rating_variance": 1.7989,
+        "popularity_rank": 6,
+        "variance_rank": 2260
+      }
+    },
+    {
+      "internal_movie_id": 27670,
+      "movie_id": "spirited-away",
+      "title": "Spirited Away",
+      "year": 2001,
+      "genres": [
+        "Animation",
+        "Family",
+        "Fantasy"
+      ],
+      "pool": "popular",
+      "tmdb_id": 129,
+      "poster_path": "/39wmItIWsg5sZMyRUHLkWBcuVCM.jpg",
+      "backdrop_path": "/m4TUa2ciEWSlk37rOsjiSIvZDXE.jpg",
+      "metrics": {
+        "ratings_count": 4192,
+        "mean_rating": 8.7875,
+        "rating_variance": 1.9751,
+        "popularity_rank": 94,
+        "variance_rank": 2099
+      }
+    },
+    {
+      "internal_movie_id": 30922,
+      "movie_id": "the-dark-knight",
+      "title": "The Dark Knight",
+      "year": 2008,
+      "genres": [
+        "Drama",
+        "Action",
+        "Crime",
+        "Thriller"
+      ],
+      "pool": "popular",
+      "tmdb_id": 155,
+      "poster_path": "/qJ2tW6WMUDux911r6m7haRef0WH.jpg",
+      "backdrop_path": "/cfT29Im5VDvjE0RpyKOSdCKZal7.jpg",
+      "metrics": {
+        "ratings_count": 5054,
+        "mean_rating": 8.5497,
+        "rating_variance": 2.5511,
+        "popularity_rank": 13,
+        "variance_rank": 1204
+      }
+    },
+    {
+      "internal_movie_id": 32092,
+      "movie_id": "the-godfather",
+      "title": "The Godfather",
+      "year": 1972,
+      "genres": [
+        "Drama",
+        "Crime"
+      ],
+      "pool": "popular",
+      "tmdb_id": 238,
+      "poster_path": "/3bhkrj58Vtu7enYsRolD1fZdja1.jpg",
+      "backdrop_path": "/tSPT36ZKlP2WVHJLM4cQPLSzv3b.jpg",
+      "metrics": {
+        "ratings_count": 4278,
+        "mean_rating": 9.0521,
+        "rating_variance": 1.8325,
+        "popularity_rank": 79,
+        "variance_rank": 2237
+      }
+    },
+    {
+      "internal_movie_id": 32147,
+      "movie_id": "the-good-the-bad-and-the-ugly",
+      "title": "The Good, the Bad and the Ugly",
+      "year": 1966,
+      "genres": [
+        "Western"
+      ],
+      "pool": "popular",
+      "tmdb_id": 429,
+      "poster_path": "/bX2xnavhMYjWDoZp1VM6VnU1xwe.jpg",
+      "backdrop_path": "/x4biAVdPVCghBlsVIzB6NmbghIz.jpg",
+      "metrics": {
+        "ratings_count": 2552,
+        "mean_rating": 8.8852,
+        "rating_variance": 1.8218,
+        "popularity_rank": 520,
+        "variance_rank": 2243
+      }
+    },
+    {
+      "internal_movie_id": 33906,
+      "movie_id": "the-matrix",
+      "title": "The Matrix",
+      "year": 1999,
+      "genres": [
+        "Action",
+        "Science Fiction"
+      ],
+      "pool": "popular",
+      "tmdb_id": 603,
+      "poster_path": "/dXNAPwY7VrqMAo51EKhhCJfaGb5.jpg",
+      "backdrop_path": "/tlm8UkiQsitc8rSuIAscQDCnP8d.jpg",
+      "metrics": {
+        "ratings_count": 4899,
+        "mean_rating": 8.3327,
+        "rating_variance": 2.4433,
+        "popularity_rank": 24,
+        "variance_rank": 1344
+      }
+    },
+    {
+      "internal_movie_id": 2127,
+      "movie_id": "american-beauty",
+      "title": "American Beauty",
+      "year": 1999,
+      "genres": [
+        "Drama"
+      ],
+      "pool": "discriminative",
+      "tmdb_id": 14,
+      "poster_path": "/wby9315QzVKdW9BonAefg8jGTTb.jpg",
+      "backdrop_path": "/kEA3iOrV1DpHQ3Z01Q28y2Qoc89.jpg",
+      "metrics": {
+        "ratings_count": 3416,
+        "mean_rating": 7.7166,
+        "rating_variance": 4.2224,
+        "popularity_rank": 241,
+        "variance_rank": 92
+      }
+    },
+    {
+      "internal_movie_id": 4976,
+      "movie_id": "bohemian-rhapsody",
+      "title": "Bohemian Rhapsody",
+      "year": 2018,
+      "genres": [
+        "Music",
+        "Drama",
+        "History"
+      ],
+      "pool": "discriminative",
+      "tmdb_id": 424694,
+      "poster_path": "/lHu1wtNaczFPGFDTrjCSzeLPTKN.jpg",
+      "backdrop_path": "/dcvbs8z0GEXslC1kCT77x19XDeR.jpg",
+      "metrics": {
+        "ratings_count": 3722,
+        "mean_rating": 5.1394,
+        "rating_variance": 4.8836,
+        "popularity_rank": 172,
+        "variance_rank": 38
+      }
+    },
+    {
+      "internal_movie_id": 11735,
+      "movie_id": "forrest-gump",
+      "title": "Forrest Gump",
+      "year": 1994,
+      "genres": [
+        "Comedy",
+        "Drama",
+        "Romance"
+      ],
+      "pool": "discriminative",
+      "tmdb_id": 13,
+      "poster_path": "/saHP97rTPS5eLmrLQEcANmKrsFl.jpg",
+      "backdrop_path": "/66Kn4XWhkuPkJxOJyPEx4U2CUfN.jpg",
+      "metrics": {
+        "ratings_count": 3903,
+        "mean_rating": 7.2421,
+        "rating_variance": 4.9388,
+        "popularity_rank": 142,
+        "variance_rank": 32
+      }
+    },
+    {
+      "internal_movie_id": 16405,
+      "movie_id": "joker-2019",
+      "title": "Joker",
+      "year": 2019,
+      "genres": [
+        "Crime",
+        "Thriller",
+        "Drama"
+      ],
+      "pool": "discriminative",
+      "tmdb_id": 475557,
+      "poster_path": "/udDclJoHjfjb8Ekgsd4FDteOkCU.jpg",
+      "backdrop_path": "/rlay2M5QYvi6igbGcFjq8jxeusY.jpg",
+      "metrics": {
+        "ratings_count": 5461,
+        "mean_rating": 6.5993,
+        "rating_variance": 4.6415,
+        "popularity_rank": 4,
+        "variance_rank": 51
+      }
+    },
+    {
+      "internal_movie_id": 17298,
+      "movie_id": "la-la-land",
+      "title": "La La Land",
+      "year": 2016,
+      "genres": [
+        "Comedy",
+        "Drama",
+        "Romance",
+        "Music"
+      ],
+      "pool": "discriminative",
+      "tmdb_id": 313369,
+      "poster_path": "/uDO8zWDhfWwoFdKS4fzkUJt0Rf0.jpg",
+      "backdrop_path": "/nlPCdZlHtRNcF6C9hzUH4ebmV1w.jpg",
+      "metrics": {
+        "ratings_count": 5054,
+        "mean_rating": 8.1854,
+        "rating_variance": 3.6417,
+        "popularity_rank": 13,
+        "variance_rank": 220
+      }
+    },
+    {
+      "internal_movie_id": 19107,
+      "movie_id": "mamma-mia",
+      "title": "Mamma Mia!",
+      "year": 2008,
+      "genres": [
+        "Comedy",
+        "Romance"
+      ],
+      "pool": "discriminative",
+      "tmdb_id": 11631,
+      "poster_path": "/xYLiCWmAMHJubx5jNZ7HuXKjAbV.jpg",
+      "backdrop_path": "/90sDsHugeRU5dtTG3zEVIOXXl4L.jpg",
+      "metrics": {
+        "ratings_count": 2421,
+        "mean_rating": 6.3717,
+        "rating_variance": 5.457,
+        "popularity_rank": 580,
+        "variance_rank": 16
+      }
+    },
+    {
+      "internal_movie_id": 19891,
+      "movie_id": "midsommar",
+      "title": "Midsommar",
+      "year": 2019,
+      "genres": [
+        "Horror",
+        "Drama",
+        "Mystery"
+      ],
+      "pool": "discriminative",
+      "tmdb_id": 530385,
+      "poster_path": "/7LEI8ulZzO5gy9Ww2NVCrKmHeDZ.jpg",
+      "backdrop_path": "/pYgj8e2Y6RufnSyOA6OnzmxFXxZ.jpg",
+      "metrics": {
+        "ratings_count": 4974,
+        "mean_rating": 7.468,
+        "rating_variance": 3.8376,
+        "popularity_rank": 18,
+        "variance_rank": 165
+      }
+    },
+    {
+      "internal_movie_id": 27849,
+      "movie_id": "star-wars-the-last-jedi",
+      "title": "Star Wars: The Last Jedi",
+      "year": 2017,
+      "genres": [
+        "Science Fiction",
+        "Action",
+        "Adventure"
+      ],
+      "pool": "discriminative",
+      "tmdb_id": 181808,
+      "poster_path": "/kOVEVeg59E0wsnXmF9nrh6OmWII.jpg",
+      "backdrop_path": "/5Iw7zQTHVRBOYpA0V6z0yypOPZh.jpg",
+      "metrics": {
+        "ratings_count": 4748,
+        "mean_rating": 6.9981,
+        "rating_variance": 4.2715,
+        "popularity_rank": 31,
+        "variance_rank": 84
+      }
+    },
+    {
+      "internal_movie_id": 37649,
+      "movie_id": "titanic-1997",
+      "title": "Titanic",
+      "year": 1997,
+      "genres": [
+        "Drama",
+        "Romance"
+      ],
+      "pool": "discriminative",
+      "tmdb_id": 597,
+      "poster_path": "/9xjZS2rlVxm8SFx8kPC3aIGCOYQ.jpg",
+      "backdrop_path": "/sCzcYW9h55WcesOqA12cgEr9Exw.jpg",
+      "metrics": {
+        "ratings_count": 3554,
+        "mean_rating": 7.4066,
+        "rating_variance": 3.58,
+        "popularity_rank": 210,
+        "variance_rank": 245
+      }
+    },
+    {
+      "internal_movie_id": 38395,
+      "movie_id": "twilight-2008",
+      "title": "Twilight",
+      "year": 2008,
+      "genres": [
+        "Fantasy",
+        "Drama",
+        "Romance"
+      ],
+      "pool": "discriminative",
+      "tmdb_id": 8966,
+      "poster_path": "/3Gkb6jm6962ADUPaCBqzz9CTbn9.jpg",
+      "backdrop_path": "/weAYfu6FfrNxEDJ3xH1XpgQcqUv.jpg",
+      "metrics": {
+        "ratings_count": 2785,
+        "mean_rating": 4.8,
+        "rating_variance": 5.3938,
+        "popularity_rank": 434,
+        "variance_rank": 18
+      }
+    }
+  ]
+}

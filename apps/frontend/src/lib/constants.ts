@@ -9,6 +9,7 @@ export const FILM_CATALOG_YEAR_LIMIT = 2019;
 export const RECOMMENDED_MIN_RATINGS = 10;
 export const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 export const UPLOAD_TIMEOUT_MS = 180_000;
+export const TASTE_PROFILE_TIMEOUT_MS = 180_000;
 
 export const HERO_BACKDROP_PATH = "/cfT29Im5VDvjE0RpyKOSdCKZal7.jpg";
 
@@ -16,6 +17,12 @@ export const LOADING_MESSAGES = [
   "Reading your Letterboxd history...",
   "Finding your cinematic taste...",
   "Preparing your recommendations...",
+] as const;
+
+export const TASTE_PROFILE_LOADING_MESSAGES = [
+  "Reading your taste profile...",
+  "Comparing your ratings with film lovers...",
+  "Preparing your discoveries...",
 ] as const;
 
 export const MAX_UPLOAD_SIZE_MB = (() => {

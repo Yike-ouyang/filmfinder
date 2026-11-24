@@ -150,6 +150,22 @@ class RecommendationService:
             summary,
         )
 
+    def recommend_from_ratings(
+        self,
+        ratings,
+        watched,
+        limit,
+        summary,
+    ):
+        limit = self._validate_limit(limit)
+        if not ratings:
+            raise APIError(
+                422,
+                "insufficient_taste_ratings",
+                "Not enough ratings are available for recommendations.",
+            )
+        return self._recommend_response(ratings, watched, limit, summary)
+
     def recommend_for_saved_profile(
         self,
         ratings,
