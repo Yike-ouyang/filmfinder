@@ -105,3 +105,4 @@ docs/server.md
 *.sqlite-shm
 *.sqlite-wal
 apps/backend/var/
+docs
